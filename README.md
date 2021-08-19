@@ -1,2 +1,2 @@
 # pose-estimation
- Collection of different pose estimation models.
+Collection of different pose estimation models.
