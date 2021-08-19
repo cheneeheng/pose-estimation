@@ -112,8 +112,8 @@ if __name__ == "__main__":
         rgb_path = os.path.join(clip_path, 'rgb')
         depth_path = os.path.join(clip_path, 'depth')
 
-        os.makedirs(os.path.join(clip_path, 'skeleton'), exist_ok=True)
-        assert not os.listdir(os.path.join(clip_path, 'skeleton'))
+        os.makedirs(os.path.join(clip_path, 'skeleton_rgb'), exist_ok=True)
+        assert not os.listdir(os.path.join(clip_path, 'skeleton_rgb'))
 
         kpt_arr, skel_arr = None, None
 
