@@ -104,6 +104,9 @@ if __name__ == "__main__":
     for clip_id in sorted(os.listdir(CLIPS_PATH)):
         clip_path = os.path.join(CLIPS_PATH, clip_id)
 
+        if int(clip_id) > 1 or int(clip_id) < 0:
+            continue
+
         print("Processing :", clip_path)
 
         calib_path = os.path.join(clip_path, 'calib.txt')
