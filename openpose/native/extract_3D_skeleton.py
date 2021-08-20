@@ -102,7 +102,8 @@ if __name__ == "__main__":
     pyop = PyOpenPoseNative(params)
     pyop.initialize()
 
-    for clip_id in sorted(os.listdir(CLIPS_PATH))[sys.argv[1]:sys.argv[2]]:
+    for clip_id in sorted(os.listdir(CLIPS_PATH))[int(sys.argv[1]):int(sys.argv[2])]:
+    # for clip_id in sorted(os.listdir(CLIPS_PATH))[549:550]:
         clip_path = os.path.join(CLIPS_PATH, clip_id)
 
         print("Processing :", clip_path)
@@ -167,9 +168,9 @@ if __name__ == "__main__":
             sleep(0.01)
 
         npy_path = os.path.join(clip_path, 'skeleton.npy')
-        np.save(npy_path, keypoint)
+        np.save(npy_path, kpt_arr)
         npy_path = os.path.join(clip_path, 'skeleton_3d.npy')
-        np.save(npy_path, skeleton3d)
+        np.save(npy_path, skel_arr)
 
     # Display Image
     # print("Body keypoints: \n" + str(pyop.pose_keypoints))
