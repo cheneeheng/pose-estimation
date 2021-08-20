@@ -3,6 +3,7 @@ import json
 import numpy as np
 import os
 import pyopenpose as op
+import sys
 
 from tqdm import tqdm
 from time import sleep
@@ -101,11 +102,8 @@ if __name__ == "__main__":
     pyop = PyOpenPoseNative(params)
     pyop.initialize()
 
-    for clip_id in sorted(os.listdir(CLIPS_PATH)):
+    for clip_id in sorted(os.listdir(CLIPS_PATH))[sys.argv[1]:sys.argv[2]]:
         clip_path = os.path.join(CLIPS_PATH, clip_id)
-
-        if int(clip_id) > 1 or int(clip_id) < 0:
-            continue
 
         print("Processing :", clip_path)
 
