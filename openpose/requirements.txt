@@ -17,3 +17,5 @@ opencv-python
 # tensorflow-hub
 
 tqdm
+
+pyrealsense2
