@@ -1,10 +1,7 @@
-from genericpath import exists
 import cv2
 import json
 import numpy as np
 import os
-from numpy.lib.stride_tricks import as_strided
-import pyrealsense2 as rs
 
 from datetime import datetime
 
@@ -14,26 +11,28 @@ from .realsense import RealsenseWrapper
 
 
 def data_storage_setup():
-    date_time = datetime.now()
-    date_time = date_time.strftime("%Y%m%d%H%M%S")
-    save_path_calib = f'/data/{date_time}/calib'
-    save_path_depth = f'/data/{date_time}/depth'
-    save_path_rgb = f'/data/{date_time}/rgb'
-    save_path_timestamp = f'/data/{date_time}/timestamp'
+    date_time = datetime.now().strftime("%Y%m%d%H%M%S")
+    save_path_calib = f'/data/openpose/calib/{date_time}'
+    save_path_rgb = f'/data/openpose/rgb/{date_time}'
+    save_path_depth = f'/data/openpose/depth/{date_time}'
+    save_path_skeleton = f'/data/openpose/skeleton/{date_time}'
+    save_path_timestamp = f'/data/openpose/timestamp/{date_time}'
+    os.makedirs(save_path_calib, exist_ok=True)
     os.makedirs(save_path_rgb, exist_ok=True)
     os.makedirs(save_path_depth, exist_ok=True)
-    os.makedirs(save_path_calib, exist_ok=True)
+    os.makedirs(save_path_skeleton, exist_ok=True)
     os.makedirs(save_path_timestamp, exist_ok=True)
-    return save_path_rgb, save_path_depth, save_path_calib, save_path_timestamp
+    return (save_path_calib, save_path_rgb, save_path_depth,
+            save_path_skeleton, save_path_timestamp)
 
 
 if __name__ == "__main__":
 
     state = True
     display_rs = False
-    display_skel = True
+    display_skel = False
 
-    kpt_arr, skel_arr = None, None
+    save_skel = True
 
     params = dict()
     params["model_folder"] = "/usr/local/src/openpose/models/"
@@ -43,47 +42,60 @@ if __name__ == "__main__":
     pyop = PyOpenPoseNative(params)
     pyop.initialize()
 
-    sp_rgb, sp_depth, sp_calib, sp_timestamp = data_storage_setup()
+    sp_calib, sp_rgb, sp_depth, sp_skeleton, sp_ts = data_storage_setup()
 
     rsw = RealsenseWrapper()
     rsw.configure()
     rsw.initialize()
     rsw.save_calibration(save_path=sp_calib)
 
-    assert os.path.exists(sp_timestamp)
-    if os.path.isfile(sp_timestamp):
-        timestamp_file = open(sp_timestamp, 'a')
-    else:
-        timestamp_file = open(os.path.join(sp_timestamp, 'timestamp.txt'), 'w')
+    timestamp_file = os.path.join(sp_ts, 'timestamp.txt')
 
     try:
         while state:
-            state, color_image, depth_image = rsw.run(
+
+            # 1. Get rs data ---------------------------------------------------
+            state, color_image, depth_image, timestamp = rsw.run(
                 rgb_save_path=sp_rgb,
                 depth_save_path=sp_depth,
                 timestamp_file=timestamp_file,
                 display=display_rs)
 
+            # 2. Predict pose --------------------------------------------------
             # bgr format
             pyop.predict(color_image)
 
+            # 3. Get prediction scores -----------------------------------------
             scores = pyop.pose_scores
-            max_score_idx = np.argmax(scores)
+            # max_score_idx = np.argmax(scores)
+            max_score_idxs = np.argsort(scores)[-2:]
 
-            keypoint = pyop.pose_keypoints[max_score_idx]
-            keypoint = np.expand_dims(keypoint, axis=0)
+            print(f"{timestamp:d} : {scores[max_score_idxs[-1]]:.4f}")
 
-            keypoint_image = pyop.opencv_image
-            cv2.putText(keypoint_image,
-                        "KP (%) : " + str(round(max(scores), 2)),
-                        (10, 20),
-                        cv2.FONT_HERSHEY_PLAIN,
-                        1,
-                        (255, 0, 0),
-                        1,
-                        cv2.LINE_AA)
+            if save_skel:
+                for max_score_idx in max_score_idxs:
+                    keypoint = pyop.pose_keypoints[max_score_idx]
+                    skeleton3d = get_3d_skeleton(
+                        keypoint,
+                        depth_image,
+                        rsw.calib_data['rgb']['intrinsic_mat'])
+
+                    skel_file = os.path.join(sp_ts, f'{timestamp}' + '.txt')
+                    skeleton3d_str = ",".join([str(skel)
+                                               for skel in skeleton3d.tolist()])
+                    with open(skel_file, 'a+') as f:
+                        f.write(f'{skeleton3d_str}')
 
             if display_skel:
+                keypoint_image = pyop.opencv_image
+                cv2.putText(keypoint_image,
+                            "KP (%) : " + str(round(max(scores), 2)),
+                            (10, 20),
+                            cv2.FONT_HERSHEY_PLAIN,
+                            1,
+                            (255, 0, 0),
+                            1,
+                            cv2.LINE_AA)
                 cv2.imshow('keypoint_image', keypoint_image)
                 key = cv2.waitKey(30)
                 # Press esc or 'q' to close the image window
@@ -91,21 +103,6 @@ if __name__ == "__main__":
                     cv2.destroyAllWindows()
                     cv2.waitKey(5)
                     break
-
-            # skeleton_rgb_path = rgb_file_path.replace("rgb", "skeleton_rgb")
-            # skeleton_rgb_path = skeleton_rgb_path[:-4] + ".jpg"
-            # cv2.imwrite(skeleton_rgb_path, keypoint_image)
-
-            skeleton3d = get_3d_skeleton(
-                keypoint[0],
-                depth_image,
-                rsw.calib_data['rgb']['intrinsic_mat'])
-
-            # skeleton3d = np.expand_dims(skeleton3d, axis=0)
-            # if skel_arr is None:
-            #     skel_arr = np.copy(skeleton3d)
-            # else:
-            #     skel_arr = np.append(skel_arr, skeleton3d, axis=0)
 
     except:  # noqa
         print("Stopping realsense...")

@@ -1,6 +1,18 @@
 {
-    "python.pythonPath": "/bin/python",
-    "python.linting.pylintEnabled": false,
+    "python.pythonPath": "/usr/local/bin/python",
+    "jupyter.jupyterServerType": "local",
     "python.linting.pycodestyleEnabled": true,
-    "python.linting.enabled": true
+    "python.linting.pycodestylePath": "/usr/local/bin/pycodestyle",
+    "python.linting.pycodestyleArgs": ["--max-line-length=80"],
+    "python.linting.enabled": true,
+    "python.formatting.autopep8Path": "/usr/local/bin/autopep8",
+    "python.linting.pylintEnabled": false,
+    // "python.linting.pylintEnabled": true,
+    // "python.linting.pylintPath": "/usr/local/bin/pylint"
+    "editor.wordWrap": "wordWrapColumn",
+    "editor.wordWrapColumn": 160,
+    "editor.rulers": [ 80 ],
+    "window.zoomLevel": 0,
+    "editor.fontSize": 13,
+    "terminal.integrated.fontSize": 14,
 }

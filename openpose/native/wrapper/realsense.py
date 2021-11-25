@@ -133,15 +133,14 @@ class RealsenseWrapper(object):
         color_image = np.asanyarray(aligned_color_frame.get_data())
 
         if depth_save_path is not None:
-            np.save(
-                os.path.join(depth_save_path, f'{timestamp}'), depth_image)
+            np.save(os.path.join(depth_save_path, f'{timestamp}'), depth_image)
 
         if rgb_save_path is not None:
-            np.save(
-                os.path.join(rgb_save_path, f'{timestamp}'), color_image)
+            np.save(os.path.join(rgb_save_path, f'{timestamp}'), color_image)
 
         if timestamp_file is not None:
-            timestamp_file.write("%d\r" % timestamp)
+            with open(timestamp_file, 'a+') as f:
+                f.write(f'{timestamp}')
 
         if display:
             # Render images
@@ -176,4 +175,4 @@ class RealsenseWrapper(object):
                 cv2.waitKey(5)
                 return False, None, None
 
-        return True, color_image, depth_image
+        return True, color_image, depth_image, timestamp
