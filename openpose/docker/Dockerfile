@@ -1,13 +1,19 @@
-FROM nvidia/cuda:10.2-cudnn7-devel-ubuntu18.04
-# FROM opencv-4.5.2:cuda11.3.0-cudnn8-devel-ubuntu20.04
-# ENV LANG en_US.UTF-8
+FROM nvidia/cuda:10.2-cudnn7-devel-ubuntu18.04 AS openpose
 
+ENV LANG en_US.UTF-8
+
+ARG UNAME_ARG
+ARG UID_ARG
+
+# ------------------------------------------------------------------------------
+# Main apts 
 RUN apt-get update -y
 RUN apt-get install -y sudo nano unzip wget curl git 
 
 ENV TZ=Europe/Berlin
 RUN DEBIAN_FRONTEND="noninteractive" apt-get -y install tzdata
 
+# ------------------------------------------------------------------------------
 # Python 3.8
 RUN apt-get install -y software-properties-common && \
     add-apt-repository -y ppa:deadsnakes/ppa && \
@@ -19,11 +25,18 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ## Turns off buffering for easier container logging
 ENV PYTHONUNBUFFERED=1
 
-# Apts
-RUN apt-get install -y libprotobuf-dev protobuf-compiler libgoogle-glog-dev
-RUN apt-get install -y libboost-all-dev libhdf5-dev libatlas-base-dev
-RUN apt-get install -y libopencv-dev
+# ------------------------------------------------------------------------------
+# Apt libraries
+RUN apt-get install -y \
+    libprotobuf-dev \
+    protobuf-compiler \
+    libgoogle-glog-dev \
+    libboost-all-dev \
+    libhdf5-dev \
+    libatlas-base-dev \
+    libopencv-dev
 
+# ------------------------------------------------------------------------------
 # pip
 WORKDIR /tmp
 RUN curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py &&  python3 get-pip.py
@@ -43,17 +56,18 @@ ENV PATH="/opt/cmake-3.21.1-linux-x86_64/bin:${PATH}"
 WORKDIR /usr/local/src/openpose
 RUN git clone https://github.com/CMU-Perceptual-Computing-Lab/openpose.git .
 WORKDIR /usr/local/src/openpose/build
-RUN cmake -D DOWNLOAD_BODY_25_MODEL=ON \
-          -D DOWNLOAD_BODY_COCO_MODEL=ON \
-          -D DOWNLOAD_BODY_MPI_MODEL=ON \
-          -D DOWNLOAD_FACE_MODEL=OFF \
-          -D DOWNLOAD_HAND_MODEL=OFF \ 
-          -D CUDA_ARCH=Manual \
-          -D CUDA_ARCH_BIN="5.3 6.0 6.1 7.0 7.5" \
-          -D CUDA_ARCH_PTX="7.5" \ 
-          -D BUILD_PYTHON=ON \
-          -D PYTHON_EXECUTABLE="/usr/bin/python3.8" \
-          -D PYTHON_LIBRARY="/usr/lib/x86_64-linux-gnu/libpython3.8m.so" ..
+RUN cmake \
+    -D DOWNLOAD_BODY_25_MODEL=ON \
+    -D DOWNLOAD_BODY_COCO_MODEL=ON \
+    -D DOWNLOAD_BODY_MPI_MODEL=ON \
+    -D DOWNLOAD_FACE_MODEL=OFF \
+    -D DOWNLOAD_HAND_MODEL=OFF \ 
+    -D CUDA_ARCH=Manual \
+    -D CUDA_ARCH_BIN="5.3 6.0 6.1 7.0 7.5" \
+    -D CUDA_ARCH_PTX="7.5" \ 
+    -D BUILD_PYTHON=ON \
+    -D PYTHON_EXECUTABLE="/usr/bin/python3.8" \
+    -D PYTHON_LIBRARY="/usr/lib/x86_64-linux-gnu/libpython3.8m.so" ..
 RUN make -j8
 
 WORKDIR /usr/local/src/openpose/build/python/openpose
@@ -67,8 +81,8 @@ ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/src/openpose/build/python/ope
 
 # Creates a non-root user with an explicit UID and adds permission to access the /app folder
 # For more info, please refer to https://aka.ms/vscode-docker-python-configure-containers
-RUN adduser -u 1000 --disabled-password --gecos "" admin
-RUN echo "admin:admin" | chpasswd 
-RUN usermod -aG sudo admin
-USER admin
-WORKDIR /home/admin
+RUN adduser -u ${UID_ARG} --disabled-password --gecos "" ${UNAME_ARG}
+RUN echo "${UNAME_ARG}:${UNAME_ARG}" | chpasswd 
+RUN usermod -aG sudo ${UNAME_ARG}
+USER ${UNAME_ARG}
+WORKDIR /code/openpose

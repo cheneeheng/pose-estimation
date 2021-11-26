@@ -5,9 +5,9 @@ import os
 
 from datetime import datetime
 
-from .skeleton import PyOpenPoseNative
-from .skeleton import get_3d_skeleton
-from .realsense import RealsenseWrapper
+from skeleton import PyOpenPoseNative
+from skeleton import get_3d_skeleton
+from realsense import RealsenseWrapper
 
 
 def data_storage_setup():
