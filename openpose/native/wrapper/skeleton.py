@@ -44,11 +44,19 @@ class PyOpenPoseNative(object):
 
 
 def get_3d_skeleton(skeleton, depth_img, intr_mat, patch_offset=2):
+    if isinstance(intr_mat, list):
+        fx = intr_mat[0]
+        fy = intr_mat[4]
+        cx = intr_mat[2]
+        cy = intr_mat[5]
+    elif isinstance(intr_mat, np.ndarray):
+        fx = intr_mat[0, 0]
+        fy = intr_mat[1, 1]
+        cx = intr_mat[0, 2]
+        cy = intr_mat[1, 2]
+    else:
+        raise ValueError("Unknown intr_mat format.")
     H, W = depth_img.shape
-    fx = intr_mat[0, 0]
-    fy = intr_mat[1, 1]
-    cx = intr_mat[0, 2]
-    cy = intr_mat[1, 2]
     joints3d = []
     for x, y, _ in skeleton:
         patch = depth_img[

@@ -1,9 +1,10 @@
+import argparse
 import cv2
-import json
 import numpy as np
 import os
 
 from datetime import datetime
+from functools import partial
 
 from skeleton import PyOpenPoseNative
 from skeleton import get_3d_skeleton
@@ -26,32 +27,83 @@ def data_storage_setup():
             save_path_skeleton, save_path_timestamp)
 
 
+def save_skel3d(skel3d, sp_skeleton, timestamp):
+    skel_file = os.path.join(sp_skeleton, f'{timestamp}' + '.txt')
+    skel3d_str = ",".join([str(pos)
+                           for skel in skel3d.tolist()
+                           for pos in skel])
+    with open(skel_file, 'a+') as f:
+        f.write(f'{skel3d_str}')
+
+
+def get_parser():
+    parser = argparse.ArgumentParser(
+        description='Extract 3D skeleton using OPENPOSE')
+
+    parser.add_argument('--display-rs',
+                        type=bool,
+                        default=False,
+                        help='if true, display realsense raw images.')
+    parser.add_argument('--display-skel',
+                        type=bool,
+                        default=False,
+                        help='if true, display skel images from openpose.')
+
+    parser.add_argument('--save-skel',
+                        default=True,
+                        help='if true, save 3d skeletons.')
+    parser.add_argument('--save-skel-thres',
+                        type=float,
+                        default=0.5,
+                        help='threshold for valid skeleton.')
+    parser.add_argument('--max-true-body',
+                        type=int,
+                        default=2,
+                        help='max number of skeletons to save.')
+
+    parser.add_argument('--model-folder',
+                        type=str,
+                        default="/usr/local/src/openpose/models/",
+                        help='foilder with trained openpose models.')
+    parser.add_argument('--model-pose',
+                        type=str,
+                        default="BODY_25",
+                        help=' ')
+    parser.add_argument('--net-resolution',
+                        type=str,
+                        default="-1x368",
+                        help='resolution of input to openpose.')
+
+    return parser
+
+
 if __name__ == "__main__":
 
+    parser = get_parser()
+    arg = parser.parse_args()
+
     state = True
-    display_rs = False
-    display_skel = False
+    empty_skel3d = np.zeros((25, 3))
 
-    save_skel = True
-
-    max_true_body = 2
-
-    params = dict()
-    params["model_folder"] = "/usr/local/src/openpose/models/"
-    params["model_pose"] = "BODY_25"
-    params["net_resolution"] = "-1x368"
-
+    # 0. Initialize ------------------------------------------------------------
+    # OPENPOSE
+    params = dict(
+        model_folder=arg.model_folder,
+        model_pose=arg.model_pose,
+        net_resolution=arg.net_resolution,
+    )
     pyop = PyOpenPoseNative(params)
     pyop.initialize()
 
+    # STORAGE
     sp_calib, sp_rgb, sp_depth, sp_skeleton, sp_ts = data_storage_setup()
+    timestamp_file = os.path.join(sp_ts, 'timestamp.txt')
 
+    # REALSENSE
     rsw = RealsenseWrapper()
     rsw.configure()
     rsw.initialize()
     rsw.save_calibration(save_path=sp_calib)
-
-    timestamp_file = os.path.join(sp_ts, 'timestamp.txt')
 
     try:
         while state:
@@ -61,7 +113,8 @@ if __name__ == "__main__":
                 rgb_save_path=sp_rgb,
                 depth_save_path=sp_depth,
                 timestamp_file=timestamp_file,
-                display=display_rs)
+                display=arg.display_rs
+            )
 
             # 2. Predict pose --------------------------------------------------
             # bgr format
@@ -72,36 +125,32 @@ if __name__ == "__main__":
 
             # 3.a. Save empty array if scores is None (no skeleton at all) -----
             if scores is None:
-                skeleton3d = np.zeros((25, 3))
-                skel_file = os.path.join(sp_skeleton, f'{timestamp}' + '.txt')
-                skeleton3d_str = ",".join([str(pos)
-                                           for skel in skeleton3d.tolist()
-                                           for pos in skel])
-                with open(skel_file, 'a+') as f:
-                    f.write(f'{skeleton3d_str}')
-                    continue
+                save_skel3d(empty_skel3d, sp_skeleton, timestamp)
+                print("No skeleton detected...")
+                continue
 
             # 3.b. Save prediction scores --------------------------------------
             # max_score_idx = np.argmax(scores)
-            max_score_idxs = np.argsort(scores)[-max_true_body:]
-            print(f"{timestamp:d} : {scores[max_score_idxs[-1]]:.4f}")
+            max_score_idxs = np.argsort(scores)[-arg.max_true_body:]
+            print(f">>>>> {timestamp:10d} : {scores[max_score_idxs[-1]]:.4f}")
 
-            if save_skel:
+            if arg.save_skel:
                 for max_score_idx in max_score_idxs:
-                    keypoint = pyop.pose_keypoints[max_score_idx]
-                    skeleton3d = get_3d_skeleton(
-                        keypoint,
-                        depth_image,
-                        rsw.calib_data['rgb']['intrinsic_mat'])
 
-                    skel_file = os.path.join(sp_ts, f'{timestamp}' + '.txt')
-                    skeleton3d_str = ",".join([str(pos)
-                                               for skel in skeleton3d.tolist()
-                                               for pos in skel])
-                    with open(skel_file, 'a+') as f:
-                        f.write(f'{skeleton3d_str}')
+                    if scores[max_score_idx] < arg.save_skel_thres:
+                        save_skel3d(empty_skel3d, sp_skeleton, timestamp)
+                        print("Low skeleton score, skip skeleton...")
 
-            if display_skel:
+                    else:
+                        keypoint = pyop.pose_keypoints[max_score_idx]
+                        skel3d = get_3d_skeleton(
+                            skeleton=keypoint,
+                            depth_img=depth_image,
+                            intr_mat=rsw.calib_data['rgb'][0]['intrinsic_mat']
+                        )
+                        save_skel3d(skel3d, sp_skeleton, timestamp)
+
+            if arg.display_skel:
                 keypoint_image = pyop.opencv_image
                 cv2.putText(keypoint_image,
                             "KP (%) : " + str(round(max(scores), 2)),
