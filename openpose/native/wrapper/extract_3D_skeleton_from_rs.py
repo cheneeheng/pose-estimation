@@ -125,7 +125,7 @@ if __name__ == "__main__":
 
             # 3.a. Save empty array if scores is None (no skeleton at all) -----
             if scores is None:
-                for i in arg.max_true_body:
+                for _ in range(arg.max_true_body):
                     save_skel3d(empty_skel3d, sp_skeleton, timestamp)
                 print("No skeleton detected...")
                 continue
