@@ -12,6 +12,7 @@ DOCKER_BUILDKIT=1 docker build \
     --target openpose-librealsense \
     --build-arg LIBRS_VERSION=${LIBRS_VERSION} \
     --build-arg OPENPOSE_IMAGE_ARG=${OPENPOSE_IMAGE} \
+    --build-arg UNAME_ARG=$1 \
     --tag openpose-librealsense:${LIBRS_VERSION} \
     .
 echo "Built images for librealsense version ${LIBRS_VERSION} with openpose"

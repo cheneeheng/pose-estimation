@@ -2,6 +2,7 @@
 # https://github.com/IntelRealSense/librealsense/blob/master/scripts/Docker/Dockerfile
 
 ARG BASE_IMAGE=ubuntu:18.04 
+ARG OPENPOSE_IMAGE_ARG=openpose:latest
 #################################
 #   Librealsense Builder Stage  #
 #################################
@@ -56,8 +57,11 @@ RUN cd /usr/src/librealsense \
 ######################################
 #   librealsense Base Image Stage    #
 ######################################
-ARG OPENPOSE_IMAGE_ARG=openpose:latest
 FROM ${OPENPOSE_IMAGE_ARG} as openpose-librealsense
+
+ARG UNAME_ARG
+
+USER root
 
 # Copy binaries from builder stage
 COPY --from=librealsense-builder /opt/librealsense /usr/local/
@@ -75,6 +79,8 @@ RUN apt-get update \
     curl \
     software-properties-common \
     && rm -rf /var/lib/apt/lists/*
+
+USER ${UNAME_ARG}
 
 # Shows a list of connected Realsense devices
 CMD [ "rs-enumerate-devices", "--compact" ]
