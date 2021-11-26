@@ -140,7 +140,7 @@ class RealsenseWrapper(object):
 
         if timestamp_file is not None:
             with open(timestamp_file, 'a+') as f:
-                f.write(f'{timestamp}')
+                f.write(f'{timestamp}\n')
 
         if display:
             # Render images

@@ -73,9 +73,10 @@ if __name__ == "__main__":
             # 3.a. Save empty array if scores is None (no skeleton at all) -----
             if scores is None:
                 skeleton3d = np.zeros((25, 3))
-                skel_file = os.path.join(sp_ts, f'{timestamp}' + '.txt')
-                skeleton3d_str = ",".join([str(skel)
-                                           for skel in skeleton3d.tolist()])
+                skel_file = os.path.join(sp_skeleton, f'{timestamp}' + '.txt')
+                skeleton3d_str = ",".join([str(pos)
+                                           for skel in skeleton3d.tolist()
+                                           for pos in skel])
                 with open(skel_file, 'a+') as f:
                     f.write(f'{skeleton3d_str}')
                     continue
@@ -94,8 +95,9 @@ if __name__ == "__main__":
                         rsw.calib_data['rgb']['intrinsic_mat'])
 
                     skel_file = os.path.join(sp_ts, f'{timestamp}' + '.txt')
-                    skeleton3d_str = ",".join([str(skel)
-                                               for skel in skeleton3d.tolist()])
+                    skeleton3d_str = ",".join([str(pos)
+                                               for skel in skeleton3d.tolist()
+                                               for pos in skel])
                     with open(skel_file, 'a+') as f:
                         f.write(f'{skeleton3d_str}')
 
