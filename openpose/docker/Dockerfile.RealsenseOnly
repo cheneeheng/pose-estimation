@@ -75,5 +75,8 @@ RUN apt-get update \
     software-properties-common \
     && rm -rf /var/lib/apt/lists/*
 
+ARG UNAME_ARG
+USER ${UNAME_ARG}
+
 # Shows a list of connected Realsense devices
 CMD [ "rs-enumerate-devices", "--compact" ]

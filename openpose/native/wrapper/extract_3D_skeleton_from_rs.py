@@ -34,6 +34,8 @@ if __name__ == "__main__":
 
     save_skel = True
 
+    max_true_body = 2
+
     params = dict()
     params["model_folder"] = "/usr/local/src/openpose/models/"
     params["model_pose"] = "BODY_25"
@@ -67,9 +69,20 @@ if __name__ == "__main__":
 
             # 3. Get prediction scores -----------------------------------------
             scores = pyop.pose_scores
-            # max_score_idx = np.argmax(scores)
-            max_score_idxs = np.argsort(scores)[-2:]
 
+            # 3.a. Save empty array if scores is None (no skeleton at all) -----
+            if scores is None:
+                skeleton3d = np.zeros((25, 3))
+                skel_file = os.path.join(sp_ts, f'{timestamp}' + '.txt')
+                skeleton3d_str = ",".join([str(skel)
+                                           for skel in skeleton3d.tolist()])
+                with open(skel_file, 'a+') as f:
+                    f.write(f'{skeleton3d_str}')
+                    continue
+
+            # 3.b. Save prediction scores --------------------------------------
+            # max_score_idx = np.argmax(scores)
+            max_score_idxs = np.argsort(scores)[-max_true_body:]
             print(f"{timestamp:d} : {scores[max_score_idxs[-1]]:.4f}")
 
             if save_skel:
