@@ -12,7 +12,7 @@ from realsense import RealsenseWrapper
 
 
 def data_storage_setup():
-    date_time = datetime.now().strftime("%Y%m%d%H%M%S")
+    date_time = datetime.now().strftime("%y%m%d%H%M%S")
     save_path_calib = f'/data/openpose/calib/{date_time}'
     save_path_rgb = f'/data/openpose/rgb/{date_time}'
     save_path_depth = f'/data/openpose/depth/{date_time}'
