@@ -101,7 +101,7 @@ if __name__ == "__main__":
 
     # REALSENSE
     rsw = RealsenseWrapper()
-    rsw.configure()
+    rsw.configure(fps=15)
     rsw.initialize()
     rsw.save_calibration(save_path=sp_calib)
 
