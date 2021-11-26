@@ -33,7 +33,7 @@ def save_skel3d(skel3d, sp_skeleton, timestamp):
                            for skel in skel3d.tolist()
                            for pos in skel])
     with open(skel_file, 'a+') as f:
-        f.write(f'{skel3d_str}')
+        f.write(f'{skel3d_str}\n')
 
 
 def get_parser():
