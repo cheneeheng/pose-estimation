@@ -28,7 +28,7 @@ def data_storage_setup():
 
 
 def save_skel3d(skel3d, sp_skeleton, timestamp):
-    skel_file = os.path.join(sp_skeleton, f'{timestamp}' + '.txt')
+    skel_file = os.path.join(sp_skeleton, f'{timestamp:020d}' + '.txt')
     skel3d_str = ",".join([str(pos)
                            for skel in skel3d.tolist()
                            for pos in skel])
