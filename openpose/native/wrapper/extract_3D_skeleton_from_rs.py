@@ -151,6 +151,9 @@ if __name__ == "__main__":
                         )
                         save_skel3d(skel3d, sp_skeleton, timestamp)
 
+                for _ in range(arg.max_true_body-len(max_score_idxs)):
+                    save_skel3d(empty_skel3d, sp_skeleton, timestamp)
+
             if arg.display_skel:
                 keypoint_image = pyop.opencv_image
                 cv2.putText(keypoint_image,
