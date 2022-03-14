@@ -6,8 +6,8 @@ LIBRS_VERSION="2.50.0"
 OPENPOSE_TAG="cuda10.2-cudnn7-devel-ubuntu18.04"
 TARGET_TAG="openpose-librealsense:${OPENPOSE_TAG}-${LIBRS_VERSION}"
 
-DATA_PATH="/home/dhm/workspace/deployment/data/openpose"
-CODE_PATH="/home/dhm/workspace/deployment/code/pose-estimation/openpose"
+DATA_PATH="/home/dhm/workspace/demo_event/data/openpose"
+CODE_PATH="/home/dhm/workspace/demo_event/code/pose-estimation/openpose"
 
 # By using --device-cgroup-rule flag we grant the docker continer permissions -
 # to the camera and usb endpoints of the machine.
