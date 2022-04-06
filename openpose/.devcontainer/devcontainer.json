@@ -17,6 +17,7 @@
 	"containerEnv": {
 		"DISPLAY": ":0",
 		"QT_X11_NO_MITSHM": "1",
+		"PYTHONPATH": "/code/openpose/native/wrapper/2s_agcn",
 	},
 	// Set *default* container specific settings.json values on container create.
 	"settings": {
@@ -49,7 +50,7 @@
 	],
 	"mounts": [
 		"source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind",
-		// "source=/home/chen/data,target=/home/chen/data,type=bind",
+		"source=/home/chen/work/12_AAGCN/2s-AGCN,target=/code/openpose/native/wrapper/2s_agcn,type=bind",
 		// "source=/home/chen/data/04_activity_recognition_icu/nas/DigitalICU,target=/DigitalICU,type=bind"
 	],
 	"runArgs": [
