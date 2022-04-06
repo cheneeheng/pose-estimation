@@ -73,6 +73,10 @@ def get_parser():
                         type=str,
                         default="-1x368",
                         help='resolution of input to openpose.')
+    parser.add_argument('--ntu-format',
+                        type=bool,
+                        default=False,
+                        help='whether to use coordinate system of NTU')
 
     return parser
 
@@ -144,10 +148,12 @@ if __name__ == "__main__":
 
                     else:
                         keypoint = pyop.pose_keypoints[max_score_idx]
+                        # ntu_format => x,y(up),z(neg) in meter.
                         skel3d = get_3d_skeleton(
                             skeleton=keypoint,
                             depth_img=depth_image,
-                            intr_mat=rsw.calib_data['rgb'][0]['intrinsic_mat']
+                            intr_mat=rsw.calib_data['rgb'][0]['intrinsic_mat'],
+                            ntu_format=arg.ntu_format
                         )
                         save_skel3d(skel3d, sp_skeleton, timestamp)
 

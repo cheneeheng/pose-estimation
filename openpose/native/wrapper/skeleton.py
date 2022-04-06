@@ -1,6 +1,8 @@
 import numpy as np
 import pyopenpose as op
 
+from typing import Union
+
 
 class PyOpenPoseNative(object):
 
@@ -43,7 +45,11 @@ class PyOpenPoseNative(object):
         return self.datum.poseKeypoints
 
 
-def get_3d_skeleton(skeleton, depth_img, intr_mat, patch_offset=2):
+def get_3d_skeleton(skeleton: np.ndarray,
+                    depth_img: np.ndarray,
+                    intr_mat: Union[list, np.ndarray],
+                    patch_offset: int = 2,
+                    ntu_format: bool = False):
     if isinstance(intr_mat, list):
         fx = intr_mat[0]
         fy = intr_mat[4]
@@ -66,5 +72,8 @@ def get_3d_skeleton(skeleton, depth_img, intr_mat, patch_offset=2):
         depth_avg = np.mean(patch)
         x3d = (x-cx) / fx * depth_avg
         y3d = (y-cy) / fy * depth_avg
-        joints3d.append([x3d, y3d, depth_avg])
+        if ntu_format:
+            joints3d.append([-x3d, -depth_avg, -y3d])
+        else:
+            joints3d.append([x3d, y3d, depth_avg])
     return np.array(joints3d)

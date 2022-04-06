@@ -7,7 +7,7 @@ TARGET_TAG="librealsense:${LIBRS_VERSION}"
 
 echo "Building images for librealsense version ${LIBRS_VERSION}"
 DOCKER_BUILDKIT=1 docker build \
-    --file Dockerfile.RealsenseOnly \
+    --file Dockerfile \
     --target librealsense \
     --build-arg LIBRS_VERSION=${LIBRS_VERSION} \
     --build-arg UNAME_ARG=$1 \

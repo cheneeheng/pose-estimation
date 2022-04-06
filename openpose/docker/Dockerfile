@@ -78,7 +78,10 @@ RUN ln -s /usr/local/lib/python3.8/dist-packages/pyopenpose.cpython-38-x86_64-li
 ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/src/openpose/build/python/openpose"
 
 # ------------------------------------------------------------------------------
+# pytorch
+RUN pip install torch==1.9.1+cu102 torchvision==0.10.1+cu102 -f https://download.pytorch.org/whl/cu102/torch_stable.html
 
+# ------------------------------------------------------------------------------
 # Creates a non-root user with an explicit UID and adds permission to access the /app folder
 # For more info, please refer to https://aka.ms/vscode-docker-python-configure-containers
 RUN adduser -u ${UID_ARG} --disabled-password --gecos "" ${UNAME_ARG}
