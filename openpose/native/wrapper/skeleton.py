@@ -73,7 +73,7 @@ def get_3d_skeleton(skeleton: np.ndarray,
         x3d = (x-cx) / fx * depth_avg
         y3d = (y-cy) / fy * depth_avg
         if ntu_format:
-            joints3d.append([-x3d, -depth_avg, -y3d])
+            joints3d.append([-x3d/1000, -depth_avg/1000, -y3d/1000])
         else:
             joints3d.append([x3d, y3d, depth_avg])
     return np.array(joints3d)

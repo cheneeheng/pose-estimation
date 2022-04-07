@@ -16,9 +16,12 @@ AGCN_CODE_PATH="/home/dhm/workspace/demo_event/code/2s-AGCN"
 # It also mounts the /dev directory of the host platform on the contianer
 docker run -it --rm --gpus=all \
     -v /dev:/dev \
+    --env DISPLAY=:3 \
+    --env QT_X11_NO_MITSHM=1 \
     --env PYTHONPATH=/usr/local/lib:/code/openpose/native/wrapper/2s_agcn \
     --device-cgroup-rule "c 81:* rmw" \
     --device-cgroup-rule "c 189:* rmw" \
+    --mount type=bind,source=/tmp/.X11-unix,target=/tmp/.X11-unix \
     --mount type=bind,source=${CODE_PATH},target=/code/openpose \
     --mount type=bind,source=${DATA_PATH},target=/data/openpose \
     --mount type=bind,source=${AGCN_CODE_PATH},target=/code/openpose/native/wrapper/2s_agcn \

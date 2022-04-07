@@ -94,6 +94,11 @@ if __name__ == "__main__":
     [agcn_arg, _] = parse_arg(get_agcn_parser())
 
     # 0. Initialize ------------------------------------------------------------
+
+    # STORAGE
+    sp_calib, sp_rgb, sp_depth, sp_skeleton, sp_ts = data_storage_setup()
+    timestamp_file = os.path.join(sp_ts, 'timestamp.txt')
+
     # AAGCN
     MAPPING, _, output_dir = init_file_and_folders(agcn_arg)
     DataProc = init_preprocessor(agcn_arg)
@@ -107,10 +112,6 @@ if __name__ == "__main__":
     )
     pyop = PyOpenPoseNative(params)
     pyop.initialize()
-
-    # STORAGE
-    sp_calib, sp_rgb, sp_depth, sp_skeleton, sp_ts = data_storage_setup()
-    timestamp_file = os.path.join(sp_ts, 'timestamp.txt')
 
     # REALSENSE
     rsw = RealsenseWrapper()
@@ -211,20 +212,22 @@ if __name__ == "__main__":
                         [input_data, input_data, input_data], axis=2)
                 # 4.3. Inference.
                 logits, preds = model_inference(agcn_arg, Model, input_data)
-                logits, preds = logits.tolist(), preds.item()
+                logits, preds = logits[0].tolist(), preds.item()
                 sort_idx, new_logits = filter_logits(logits)
-                skel_file = os.path.join(sp_skeleton, f'{timestamp:020d}' + '.txt')
-                output_file = os.path.join(output_dir, skel_file)
+                output_file = os.path.join(output_dir, f'{timestamp:020d}' + '.txt')
                 with open(output_file, 'a+') as f:
-                    output_str1 = ",".join([str(i) for i in preds])
+                    output_str1 = ",".join([str(i) for i in sort_idx])
                     output_str2 = ",".join([str(i) for i in new_logits])
                     output_str = f'{output_str1};{output_str2}\n'
                     output_str = output_str.replace('[', '').replace(']', '')
                     f.write(output_str)
-                    print(f"{sort_idx[0]: >2}, {new_logits[0]*100:>5.2f}")
+                    if len(sort_idx) > 0:
+                        print(f"Original Pred: {preds}, Filtered Pred: {sort_idx[0]: >2}, Logit: {new_logits[0]*100:>5.2f}")
+                    else:
+                        print(preds)
 
             except:
-                print("Not enough data...")
+                print("Inference error...")
 
     except:  # noqa
         print("Stopping realsense...")
