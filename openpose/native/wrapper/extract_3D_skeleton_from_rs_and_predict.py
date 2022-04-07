@@ -197,31 +197,34 @@ if __name__ == "__main__":
             # 4. Action recognition --------------------------------------------
             # 4.1. Batch frames to fixed length.
             skel_data = np.stack(skel_data, axis=0)  # m,v,c
-            skel_data = np.expand_dims(skel_data, axis=1)  # m,t,v,c
+            skel_data = np.expand_dims(skel_data[:,:agcn_arg.num_joint,:], axis=1)  # m,t,v,c
             DataProc.append_data(skel_data)
-            input_data = DataProc.select_skeletons_and_normalize_data(
-                agcn_arg.max_num_skeleton_true,
-                sgn='sgn' in agcn_arg.model
-            )
-            # 4.2. repeat segments in a sequence.
-            if 'aagcn' in agcn_arg.model:
-                # N, C, T, V, M
-                input_data = np.concatenate(
-                    [input_data, input_data, input_data], axis=2)
-            # 4.3. Inference.
-            logits, preds = model_inference(agcn_arg, Model, input_data)
-            logits, preds = logits.tolist(), preds.item()
-            sort_idx, new_logits = filter_logits(logits)
+            try:
+                input_data = DataProc.select_skeletons_and_normalize_data(
+                    agcn_arg.max_num_skeleton_true,
+                    sgn='sgn' in agcn_arg.model
+                )
+                # 4.2. repeat segments in a sequence.
+                if 'aagcn' in agcn_arg.model:
+                    # N, C, T, V, M
+                    input_data = np.concatenate(
+                        [input_data, input_data, input_data], axis=2)
+                # 4.3. Inference.
+                logits, preds = model_inference(agcn_arg, Model, input_data)
+                logits, preds = logits.tolist(), preds.item()
+                sort_idx, new_logits = filter_logits(logits)
+                skel_file = os.path.join(sp_skeleton, f'{timestamp:020d}' + '.txt')
+                output_file = os.path.join(output_dir, skel_file)
+                with open(output_file, 'a+') as f:
+                    output_str1 = ",".join([str(i) for i in preds])
+                    output_str2 = ",".join([str(i) for i in new_logits])
+                    output_str = f'{output_str1};{output_str2}\n'
+                    output_str = output_str.replace('[', '').replace(']', '')
+                    f.write(output_str)
+                    print(f"{sort_idx[0]: >2}, {new_logits[0]*100:>5.2f}")
 
-            skel_file = os.path.join(sp_skeleton, f'{timestamp:020d}' + '.txt')
-            output_file = os.path.join(output_dir, skel_file)
-            with open(output_file, 'a+') as f:
-                output_str1 = ",".join([str(i) for i in preds])
-                output_str2 = ",".join([str(i) for i in new_logits])
-                output_str = f'{output_str1};{output_str2}\n'
-                output_str = output_str.replace('[', '').replace(']', '')
-                f.write(output_str)
-                print(f"{sort_idx[0]: >2}, {new_logits[0]*100:>5.2f}")
+            except:
+                print("Not enough data...")
 
     except:  # noqa
         print("Stopping realsense...")

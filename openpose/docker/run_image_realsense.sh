@@ -8,14 +8,19 @@ TARGET_TAG="openpose-librealsense:${OPENPOSE_TAG}-${LIBRS_VERSION}"
 
 DATA_PATH="/home/dhm/workspace/demo_event/data/openpose"
 CODE_PATH="/home/dhm/workspace/demo_event/code/pose-estimation/openpose"
+AGCN_DATA_PATH="/home/dhm/workspace/demo_event/data/2s-agcn"
+AGCN_CODE_PATH="/home/dhm/workspace/demo_event/code/2s-AGCN"
 
 # By using --device-cgroup-rule flag we grant the docker continer permissions -
 # to the camera and usb endpoints of the machine.
 # It also mounts the /dev directory of the host platform on the contianer
 docker run -it --rm --gpus=all \
     -v /dev:/dev \
+    --env PYTHONPATH=/usr/local/lib:/code/openpose/native/wrapper/2s_agcn \
     --device-cgroup-rule "c 81:* rmw" \
     --device-cgroup-rule "c 189:* rmw" \
     --mount type=bind,source=${CODE_PATH},target=/code/openpose \
     --mount type=bind,source=${DATA_PATH},target=/data/openpose \
+    --mount type=bind,source=${AGCN_CODE_PATH},target=/code/openpose/native/wrapper/2s_agcn \
+    --mount type=bind,source=${AGCN_DATA_PATH},target=/data/2s-agcn \
     ${TARGET_TAG} $1
