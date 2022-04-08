@@ -1,0 +1,12 @@
+FROM openpose-librealsense:cuda10.2-cudnn7-devel-ubuntu18.04-2.50.0
+
+ENV LANG en_US.UTF-8
+
+ARG UNAME_ARG
+
+USER root
+
+COPY requirements_demoevent.txt /tmp
+RUN python3 -m pip install -r /tmp/requirements_demoevent.txt
+
+USER ${UNAME_ARG}

@@ -1,0 +1,38 @@
+# To ensure app dependencies are ported from your virtual 
+# environment/host machine into your container, 
+# run 'pip freeze > requirements.txt' in the terminal to overwrite this file
+
+pylint
+pep8
+autopep8
+pycodestyle
+
+PyYAML
+tensorboardX
+tensorboard
+networkx
+
+numpy
+tqdm
+matplotlib
+seaborn
+plotly
+pandas
+
+torch-tb-profiler
+
+# pillow
+# opencv-python
+
+sklearn
+
+# ipython
+ipykernel
+ipywidgets
+# ipympl
+
+torchinfo
+
+deberta
+
+einops
