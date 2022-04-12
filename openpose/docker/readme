@@ -1,2 +1,0 @@
-Dockerfile : openpose only + pytorch-1.9.1
--> Dockerfile.Realsense : adds realsense

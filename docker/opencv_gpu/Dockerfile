@@ -99,20 +99,15 @@ RUN ldconfig
 WORKDIR /
 
 # Install pip requirements
-#RUN pip install tensorflow==2.5.0
-#COPY requirements.txt /tmp
-#RUN python -m pip install -r /tmp/requirements.txt
+# RUN pip install tensorflow==2.5.0
+# COPY requirements.txt /tmp
+# RUN python -m pip install -r /tmp/requirements.txt
 
 # Creates a non-root user with an explicit UID and adds permission to access the /app folder
 # For more info, please refer to https://aka.ms/vscode-docker-python-configure-containers
-#RUN adduser -u 1000 --disabled-password --gecos "" chen
-#RUN echo "chen:chen" | chpasswd 
-#RUN usermod -aG sudo chen
-#USER chen
-#WORKDIR /home/chen
+RUN adduser -u ${UID_ARG} --disabled-password --gecos "" ${UNAME_ARG}
+RUN echo "${UNAME_ARG}:${UNAME_ARG}" | chpasswd
+RUN usermod -aG sudo ${UNAME_ARG}
+USER ${UNAME_ARG}
 
-# During debugging, this entry point will be overridden. For more information, please refer to https://aka.ms/vscode-docker-python-debug
-# CMD ["python", "-m", "run"]
-
-#EXPOSE 8000-9000
-#EXPOSE 8010/udp
+#WORKDIR /code
