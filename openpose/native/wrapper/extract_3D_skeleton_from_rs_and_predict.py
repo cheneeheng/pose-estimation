@@ -122,6 +122,9 @@ if __name__ == "__main__":
     state = True
     empty_skel3d = np.zeros((25, 3))
 
+    mva = 5
+    mva_list = []
+
     try:
         while state:
 
@@ -152,9 +155,11 @@ if __name__ == "__main__":
             # max_score_idx = np.argmax(scores)
             max_score_idxs = np.argsort(scores)[-op_arg.max_true_body:]
             try:
-                print(f">>>>> {timestamp:10d} : {max_score_idxs} : {scores[max_score_idxs[1]]:.4f} -- {scores[max_score_idxs[0]]:.4f}")
-            except:
-                print(f">>>>> {timestamp:10d} : {max_score_idxs} : {scores[max_score_idxs[0]]:.4f}")
+                print(f">>>>> {timestamp:10d} : {max_score_idxs} : {scores[max_score_idxs[1]]:.4f} -- {scores[max_score_idxs[0]]:.4f}")   # noqa
+            except IndexError:
+                print(f">>>>> {timestamp:10d} : {max_score_idxs} : {scores[max_score_idxs[0]]:.4f}")   # noqa
+            else:
+                raise ValueError()
 
             skel_data = []
 
@@ -190,6 +195,11 @@ if __name__ == "__main__":
                             (255, 0, 0),
                             1,
                             cv2.LINE_AA)
+                # keypoint_image = cv2.resize(keypoint_image, (1280, 720))
+                cv2.namedWindow('keypoint_image', cv2.WND_PROP_FULLSCREEN)
+                cv2.setWindowProperty('keypoint_image',
+                                      cv2.WND_PROP_FULLSCREEN,
+                                      cv2.WINDOW_FULLSCREEN)
                 cv2.imshow('keypoint_image', keypoint_image)
                 key = cv2.waitKey(30)
                 # Press esc or 'q' to close the image window
@@ -201,7 +211,10 @@ if __name__ == "__main__":
             # 4. Action recognition --------------------------------------------
             # 4.1. Batch frames to fixed length.
             skel_data = np.stack(skel_data, axis=0)  # m,v,c
-            skel_data = np.expand_dims(skel_data[:,:agcn_arg.num_joint,:], axis=1)  # m,t,v,c
+            skel_data = np.expand_dims(
+                skel_data[:, :agcn_arg.num_joint, :],
+                axis=1
+            )  # m,t,v,c
             DataProc.append_data(skel_data)
             try:
                 input_data = DataProc.select_skeletons_and_normalize_data(
@@ -214,10 +227,18 @@ if __name__ == "__main__":
                     input_data = np.concatenate(
                         [input_data, input_data, input_data], axis=2)
                 # 4.3. Inference.
-                logits, preds = model_inference(agcn_arg, Model, input_data)
-                logits, preds = logits[0].tolist(), preds.item()
+                (logits, _), preds = model_inference(agcn_arg, Model, input_data)  # noqa
+
+                if len(mva_list) < mva:
+                    mva_list.append(logits)
+                else:
+                    mva_list = mva_list[1:] + [logits]
+                    logits = np.mean(mva_list, axis=0)
+
+                logits, preds = logits.tolist(), preds.item()
                 sort_idx, new_logits = filter_logits(logits)
-                output_file = os.path.join(output_dir, f'{timestamp:020d}' + '.txt')
+                output_file = os.path.join(
+                    output_dir, f'{timestamp:020d}' + '.txt')
                 with open(output_file, 'a+') as f:
                     output_str1 = ",".join([str(i) for i in sort_idx])
                     output_str2 = ",".join([str(i) for i in new_logits])
@@ -225,11 +246,11 @@ if __name__ == "__main__":
                     output_str = output_str.replace('[', '').replace(']', '')
                     f.write(output_str)
                     if len(sort_idx) > 0:
-                        print(f"Original Pred: {preds}, Filtered Pred: {sort_idx[0]: >2}, Logit: {new_logits[0]*100:>5.2f}")
+                        print(f"Original Pred: {preds}, Filtered Pred: {sort_idx[0]: >2}, Logit: {new_logits[0]*100:>5.2f}")  # noqa
                     else:
                         print(preds)
 
-            except:
+            except:  # noqa
                 print("Inference error...")
 
     except:  # noqa
