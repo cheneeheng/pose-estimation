@@ -61,7 +61,7 @@ def get_parser():
                         help='if true, save 3d skeletons.')
     parser.add_argument('--save-skel-thres',
                         type=float,
-                        default=0.5,
+                        default=0.3,
                         help='threshold for valid skeleton.')
     parser.add_argument('--max-true-body',
                         type=int,
@@ -115,7 +115,7 @@ if __name__ == "__main__":
 
     # REALSENSE
     rsw = RealsenseWrapper()
-    rsw.configure(fps=15)
+    rsw.configure(fps=30)
     rsw.initialize()
     rsw.save_calibration(save_path=sp_calib)
 
@@ -151,7 +151,10 @@ if __name__ == "__main__":
             # 3.b. Save prediction scores --------------------------------------
             # max_score_idx = np.argmax(scores)
             max_score_idxs = np.argsort(scores)[-op_arg.max_true_body:]
-            print(f">>>>> {timestamp:10d} : {scores[max_score_idxs[-1]]:.4f}")
+            try:
+                print(f">>>>> {timestamp:10d} : {max_score_idxs} : {scores[max_score_idxs[1]]:.4f} -- {scores[max_score_idxs[0]]:.4f}")
+            except:
+                print(f">>>>> {timestamp:10d} : {max_score_idxs} : {scores[max_score_idxs[0]]:.4f}")
 
             skel_data = []
 
