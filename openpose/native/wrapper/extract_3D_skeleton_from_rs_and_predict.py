@@ -109,6 +109,7 @@ if __name__ == "__main__":
         model_folder=op_arg.model_folder,
         model_pose=op_arg.model_pose,
         net_resolution=op_arg.net_resolution,
+        disable_blending=True
     )
     pyop = PyOpenPoseNative(params)
     pyop.initialize()
@@ -158,8 +159,8 @@ if __name__ == "__main__":
                 print(f">>>>> {timestamp:10d} : {max_score_idxs} : {scores[max_score_idxs[1]]:.4f} -- {scores[max_score_idxs[0]]:.4f}")   # noqa
             except IndexError:
                 print(f">>>>> {timestamp:10d} : {max_score_idxs} : {scores[max_score_idxs[0]]:.4f}")   # noqa
-            else:
-                raise ValueError()
+            except Exception as e: 
+                print(e)
 
             skel_data = []
 
@@ -186,7 +187,9 @@ if __name__ == "__main__":
                 skel_data.append(empty_skel3d)
 
             if op_arg.display_skel:
+
                 keypoint_image = pyop.opencv_image
+                keypoint_image = cv2.flip(keypoint_image, 1)
                 cv2.putText(keypoint_image,
                             "KP (%) : " + str(round(max(scores), 2)),
                             (10, 20),
@@ -198,10 +201,22 @@ if __name__ == "__main__":
                 # keypoint_image = cv2.resize(keypoint_image, (1280, 720))
                 cv2.namedWindow('keypoint_image', cv2.WND_PROP_FULLSCREEN)
                 cv2.setWindowProperty('keypoint_image',
-                                      cv2.WND_PROP_FULLSCREEN,
-                                      cv2.WINDOW_FULLSCREEN)
+                                     cv2.WND_PROP_FULLSCREEN,
+                                     cv2.WINDOW_FULLSCREEN)
                 cv2.imshow('keypoint_image', keypoint_image)
-                key = cv2.waitKey(30)
+
+                # depth_image = np.clip(depth_image, 0, 10000)
+                depth_colormap = cv2.applyColorMap(
+                    cv2.convertScaleAbs(depth_image, alpha=0.065, beta=0),
+                    cv2.COLORMAP_INFERNO)
+                depth_colormap = cv2.flip(depth_colormap, 1)
+                depth_keypoint_overlay = cv2.addWeighted(
+                    keypoint_image, 0.7, depth_colormap, 0.7, 0)
+                depth_keypoint_overlay = cv2.resize(
+                    depth_keypoint_overlay, (800, 450))
+                cv2.imshow("depth_keypoint_overlay", depth_keypoint_overlay)
+                cv2.moveWindow("depth_keypoint_overlay", 1500,300);
+
                 # Press esc or 'q' to close the image window
                 if key & 0xFF == ord('q') or key == 27:
                     cv2.destroyAllWindows()
@@ -221,22 +236,31 @@ if __name__ == "__main__":
                     agcn_arg.max_num_skeleton_true,
                     sgn='sgn' in agcn_arg.model
                 )
+                input_data = DataProc.data
+
                 # 4.2. repeat segments in a sequence.
                 if 'aagcn' in agcn_arg.model:
+                    if np.sum(input_data) == np.nan:
+                        DataProc.clear_data_array()
+                        input_data = DataProc.data
                     # N, C, T, V, M
                     input_data = np.concatenate(
                         [input_data, input_data, input_data], axis=2)
+
                 # 4.3. Inference.
-                (logits, _), preds = model_inference(agcn_arg, Model, input_data)  # noqa
+                logits, preds = model_inference(agcn_arg, Model, input_data)  # noqa
+                logits = logits[0]
 
                 if len(mva_list) < mva:
-                    mva_list.append(logits)
+                    mva_list.append(logits.numpy())
                 else:
-                    mva_list = mva_list[1:] + [logits]
-                    logits = np.mean(mva_list, axis=0)
+                    mva_list = mva_list[1:] + [logits.numpy()]
+                    logits = np.mean(np.stack(mva_list, axis=0), axis=0)
+                    mva_list[-1] = logits
 
                 logits, preds = logits.tolist(), preds.item()
                 sort_idx, new_logits = filter_logits(logits)
+
                 output_file = os.path.join(
                     output_dir, f'{timestamp:020d}' + '.txt')
                 with open(output_file, 'a+') as f:
@@ -253,7 +277,8 @@ if __name__ == "__main__":
             except:  # noqa
                 print("Inference error...")
 
-    except:  # noqa
+    except Exception as e: 
+        print(e)
         print("Stopping realsense...")
         rsw.pipeline.stop()
 
