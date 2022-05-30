@@ -29,6 +29,16 @@ def read_realsense_calibration(file_path: str):
     return RealsenseConfig(calib)
 
 
+class StoragePaths(object):
+    def __init__(self):
+        self.calib = None
+        self.color = None
+        self.depth = None
+        self.skeleton = None
+        self.timestamp = None
+        self.timestamp_file = None
+
+
 class RealsenseWrapper(object):
 
     def __init__(self) -> None:
@@ -88,7 +98,7 @@ class RealsenseWrapper(object):
                 if depth_sensor.supports(rs.option.emitter_enabled):
                     depth_sensor.set_option(rs.option.emitter_enabled,
                                             1 if enable_ir_emitter else 0)
-                    depth_sensor.set_option(rs.option.laser_power, 330)
+                    # depth_sensor.set_option(rs.option.laser_power, 330)
 
             self.enabled_devices[device_serial] = (
                 Device(pipeline, pipeline_profile, product_line))
@@ -97,9 +107,7 @@ class RealsenseWrapper(object):
         self._align = rs.align(rs.stream.color)
 
     def run(self,
-            color_save_path: Optional[dict] = None,
-            depth_save_path: Optional[dict] = None,
-            timestamp_file: Optional[dict] = None,
+            storage_paths: Optional[StoragePaths] = None,
             display: bool = False) -> bool:
 
         if len(self.enabled_devices) == 0:
@@ -124,11 +132,12 @@ class RealsenseWrapper(object):
                         rs.frame_metadata_value.sensor_timestamp)
                     frames[dev_sn]['timestamp'] = timestamp
 
-                    if timestamp_file is not None:
-                        with open(timestamp_file, 'a+') as f:
+                    ts_file = storage_paths[dev_sn].timestamp_file
+                    if ts_file is not None:
+                        with open(ts_file, 'a+') as f:
                             f.write(f'{timestamp}\n')
 
-                    aligned_frameset = self.align.process(frameset)
+                    aligned_frameset = self._align.process(frameset)
                     for stream in streams:
                         st = stream.stream_type()
                         # if stream.stream_type() == rs.stream.infrared:
@@ -143,17 +152,19 @@ class RealsenseWrapper(object):
                             frame = aligned_frameset.first_or_default(st)
                             frame_data = frame.get_data()
                             frames[dev_sn]['color'] = frame_data
-                            if color_save_path is not None:
-                                np.save(os.path.join(color_save_path,
-                                        f'{timestamp}'), frame_data)
+                            filepath = storage_paths[dev_sn].color
+                            if filepath is not None:
+                                np.save(os.path.join(filepath, f'{timestamp}'),
+                                        frame_data)
                         elif st == rs.stream.depth:
                             frame = aligned_frameset.first_or_default(st)
                             frame = post_process_depth_frame(frame)
                             frame_data = frame.get_data()
                             frames[dev_sn]['depth'] = frame_data
-                            if depth_save_path is not None:
-                                np.save(os.path.join(depth_save_path,
-                                        f'{timestamp}'), frame_data)
+                            filepath = storage_paths[dev_sn].depth
+                            if filepath is not None:
+                                np.save(os.path.join(filepath, f'{timestamp}'),
+                                        frame_data)
 
             if display:
 
@@ -201,7 +212,7 @@ class RealsenseWrapper(object):
             for _, dev in self.enabled_devices.items():
                 dev.pipeline.stop()
 
-    def save_calibration(self, save_path: dict) -> None:
+    def save_calibration(self, storage_paths: StoragePaths) -> None:
         """Saves camera calibration.
 
         Args:
@@ -265,12 +276,12 @@ class RealsenseWrapper(object):
 
             self.calib_data[dev_sn] = calib_data
 
-            assert os.path.exists(save_path[dev_sn])
-            if os.path.isfile(save_path[dev_sn]):
-                with open(save_path[dev_sn], 'w') as outfile:
+            assert os.path.exists(storage_paths[dev_sn].calib)
+            if os.path.isfile(storage_paths[dev_sn].calib):
+                with open(storage_paths[dev_sn].calib, 'w') as outfile:
                     json.dump(calib_data, outfile, indent=4)
             else:
                 filename = f'dev{dev_sn}_calib.txt'
-                path = os.path.join(save_path[dev_sn], filename)
+                path = os.path.join(storage_paths[dev_sn].calib, filename)
                 with open(path, 'w') as outfile:
                     json.dump(calib_data, outfile, indent=4)
