@@ -16,12 +16,12 @@ docker run -it --rm --gpus=all \
     -v /dev:/dev \
     --env DISPLAY=:3 \
     --env QT_X11_NO_MITSHM=1 \
-    --env PYTHONPATH=/usr/local/lib:/code/openpose/native/wrapper/2s_agcn \
+    --env PYTHONPATH=/usr/local/lib:/code/pose-estimation/openpose/native/wrapper/2s_agcn \
     --device-cgroup-rule "c 81:* rmw" \
     --device-cgroup-rule "c 189:* rmw" \
     --mount type=bind,source=/tmp/.X11-unix,target=/tmp/.X11-unix \
-    --mount type=bind,source=${CODE_PATH},target=/code/openpose \
+    --mount type=bind,source=${CODE_PATH},target=/code/pose-estimation/openpose \
     --mount type=bind,source=${DATA_PATH},target=/data/openpose \
-    --mount type=bind,source=${AGCN_CODE_PATH},target=/code/openpose/native/wrapper/2s_agcn \
+    --mount type=bind,source=${AGCN_CODE_PATH},target=/code/pose-estimation/openpose/native/wrapper/2s_agcn \
     --mount type=bind,source=${AGCN_DATA_PATH},target=/data/2s-agcn \
     ${TARGET_TAG} $1
