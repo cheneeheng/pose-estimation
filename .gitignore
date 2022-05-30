@@ -117,4 +117,4 @@ dmypy.json
 .devcontainer/
 .vscode/
 
-.openpose/native/wrapper/2s_agcn/
+openpose/native/wrapper/2s_agcn/
