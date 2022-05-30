@@ -118,7 +118,8 @@ if __name__ == "__main__":
     rsw = RealsenseWrapper()
     rsw.fps = 30
     rsw.initialize()
-    rsw.save_calibration(save_path=sp_calib)
+    dev_sn = list(rsw.enabled_devices().keys())[0]
+    rsw.save_calibration(save_path={dev_sn: sp_calib})
 
     state = True
     empty_skel3d = np.zeros((25, 3))
@@ -132,16 +133,15 @@ if __name__ == "__main__":
             # 1. Get rs data ---------------------------------------------------
             # state, color_image, depth_image, timestamp = rsw.run(
             frames = rsw.run(
-                color_save_path=sp_color,
-                depth_save_path=sp_depth,
-                timestamp_file=timestamp_file,
+                color_save_path={dev_sn: sp_color},
+                depth_save_path={dev_sn: sp_depth},
+                timestamp_file={dev_sn: timestamp_file},
                 display=op_arg.display_rs
             )
             state = len(frames) > 0
             if not state:
                 continue
 
-            dev_sn = next(iter(frames))
             color_image = frames[dev_sn]['color']
             depth_image = frames[dev_sn]['depth']
             timestamp = frames[dev_sn]['timestamp']

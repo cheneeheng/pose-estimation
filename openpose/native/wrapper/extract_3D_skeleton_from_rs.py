@@ -1,5 +1,4 @@
 import argparse
-from msilib.schema import Class
 import cv2
 import numpy as np
 import os
@@ -42,7 +41,7 @@ def save_skeleton_3d(skeleton_3d: np.ndarray,
 def save_skel(pyop: PyOpenPoseNative,
               arg: argparse.Namespace,
               depth_image: np.ndarray,
-              intr_mat: np.ndarrray,
+              intr_mat: np.ndarray,
               empty_skeleton_3d: np.ndarray,
               skeleton_save_path: str,
               timestamp: float,
