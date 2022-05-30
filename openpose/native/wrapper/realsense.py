@@ -97,8 +97,12 @@ class RealsenseWrapper(object):
             with open(os.path.join(save_path, 'calib.txt'), 'w') as outfile:
                 json.dump(calib_data, outfile, indent=4)
 
-    def configure(self, fps: int = 30) -> None:
+    def configure(self, fps: int = 30, device: str = None) -> None:
         cfg = rs.config()
+        if device is not None:
+            cfg.enable_device(device)
+        # cfg.enable_device('001622070408')
+        # cfg.enable_device('001622070717')
         cfg.enable_stream(rs.stream.depth, 848, 480, rs.format.z16, fps)
         cfg.enable_stream(rs.stream.color, 848, 480, rs.format.bgr8, fps)
         self.cfg = cfg

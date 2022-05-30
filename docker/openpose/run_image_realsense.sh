@@ -6,10 +6,12 @@ LIBRS_VERSION="2.50.0"
 OPENPOSE_TAG="cuda10.2-cudnn7-devel-ubuntu18.04"
 TARGET_TAG="openpose-librealsense:${OPENPOSE_TAG}-${LIBRS_VERSION}"
 
-DATA_PATH="/home/dhm/workspace/demo_event/data/openpose"
-CODE_PATH="/home/dhm/workspace/demo_event/code/pose-estimation/openpose"
-AGCN_DATA_PATH="/home/dhm/workspace/demo_event/data/2s-agcn"
-AGCN_CODE_PATH="/home/dhm/workspace/demo_event/code/2s-AGCN"
+# DATA_PATH="/mnt/DHM-ICU-DS1/data/testing"
+# DATA_PATH="/home/dhm/workspace/demo_event/data/openpose"
+# CODE_PATH="/home/dhm/workspace/demo_event/code/pose-estimation/openpose"
+
+DATA_PATH=$2
+CODE_PATH=$3
 
 # By using --device-cgroup-rule flag we grant the docker continer permissions -
 # to the camera and usb endpoints of the machine.
@@ -24,6 +26,4 @@ docker run -it --rm --gpus=all \
     --mount type=bind,source=/tmp/.X11-unix,target=/tmp/.X11-unix \
     --mount type=bind,source=${CODE_PATH},target=/code/openpose \
     --mount type=bind,source=${DATA_PATH},target=/data/openpose \
-    --mount type=bind,source=${AGCN_CODE_PATH},target=/code/openpose/native/wrapper/2s_agcn \
-    --mount type=bind,source=${AGCN_DATA_PATH},target=/data/2s-agcn \
     ${TARGET_TAG} $1
