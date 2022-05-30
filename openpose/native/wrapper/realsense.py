@@ -4,19 +4,25 @@ import numpy as np
 import os
 import pyrealsense2 as rs
 
+from typing import Optional
 
-def read_realsense_calibration(file_path):
+from realsense_device_manager import Device
+from realsense_device_manager import enumerate_connected_devices
+from realsense_device_manager import post_process_depth_frame
+
+
+def read_realsense_calibration(file_path: str):
 
     class RealsenseConfig:
-        def __init__(self, json_file):
-            self.width = json_file['rgb'][0]['width']
-            self.height = json_file['rgb'][0]['height']
-            self.rgb_intrinsics = np.array(json_file['rgb'][0]['intrinsic_mat']).reshape(3, 3)  # noqa
-            self.depth_intrinsics = np.array(json_file['depth'][0]['intrinsic_mat']).reshape(3, 3)  # noqa
-            self.depth_scale = json_file['depth'][0]['depth_scale']
-            self.T_rgb_depth = np.eye(4)
-            self.T_rgb_depth[:3, :3] = np.array(json_file['T_rgb_depth'][0]['rotation']).reshape(3, 3)  # noqa
-            self.T_rgb_depth[:3, 3] = json_file['T_rgb_depth'][0]['translation']  # noqa
+        def __init__(self, json_data: dict):
+            self.width = json_data['color'][0]['width']
+            self.height = json_data['color'][0]['height']
+            self.color_intrinsics = np.array(json_data['color'][0]['intrinsic_mat']).reshape(3, 3)  # noqa
+            self.depth_intrinsics = np.array(json_data['depth'][0]['intrinsic_mat']).reshape(3, 3)  # noqa
+            self.depth_scale = json_data['depth'][0]['depth_scale']
+            self.T_color_depth = np.eye(4)
+            self.T_color_depth[:3, :3] = np.array(json_data['T_color_depth'][0]['rotation']).reshape(3, 3)  # noqa
+            self.T_color_depth[:3, 3] = json_data['T_color_depth'][0]['translation']  # noqa
 
     with open(file_path) as calib_file:
         calib = json.load(calib_file)
@@ -27,156 +33,244 @@ class RealsenseWrapper(object):
 
     def __init__(self) -> None:
         super().__init__()
-        self.cfg = None
-        self.pipeline = None
-        self.profile = None
-        self.calib_data = None
+        self._cfg = {}
+        self.enabled_devices = {}  # serial numbers of enabled devices
+        self._align = None
+        self.calib_data = {}
+        self.fps = 30
+        self.height = 480
+        self.width = 848
 
-    def save_calibration(self, save_path: str) -> None:
-        """Assumes that realsense is mounted statically. """
+    def configure(self,
+                  device_sn: Optional[str] = None,
+                  fps: Optional[int] = None,
+                  height: Optional[int] = None,
+                  width: Optional[int] = None) -> None:
+        """Defines per device configurations.
 
-        # Intrinsics of RGB & depth frames
-        profile_rgb = self.profile.get_stream(rs.stream.color)
-        intr_rgb = profile_rgb.as_video_stream_profile().get_intrinsics()
-        # intr_rgb_mat = np.array([[intr_rgb.fx, 0, intr_rgb.ppx],
-        #                         [0, intr_rgb.fy, intr_rgb.ppy],
-        #                         [0, 0, 1]])
+        device('001622070408')
+        device('001622070717')
 
-        # Fetch stream profile for depth stream
-        profile_depth = self.profile.get_stream(rs.stream.depth)
+        Args:
+            device_sn (str, optional): serial number. Defaults to None.
+            fps (int, optional): frame fps. Defaults to 30.
+            height (int, optional): frame height. Defaults to 480.
+            width (int, optional): frame width. Defaults to 848.
+        """
+        if device_sn is not None:
+            cfg = rs.config()
+            cfg.enable_stream(rs.stream.depth,
+                              width if width is not None else self.width,
+                              height if height is not None else self.height,
+                              rs.format.z16,
+                              fps if fps is not None else self.fps)
+            cfg.enable_stream(rs.stream.color,
+                              width if width is not None else self.width,
+                              height if height is not None else self.height,
+                              rs.format.bgr8,
+                              fps if fps is not None else self.fps)
+            self._cfg[device_sn] = cfg
 
-        # Downcast to video_stream_profile and fetch intrinsics
-        intr_depth = profile_depth.as_video_stream_profile().get_intrinsics()
-        # intr_depth_mat = np.array([[intr_depth.fx, 0, intr_depth.ppx],
-        #                            [0, intr_depth.fy, intr_depth.ppy],
-        #                            [0, 0, 1]])
+    def initialize(self, enable_ir_emitter: bool = True) -> None:
 
-        # Extrinsic matrix from RGB sensor to Depth sensor
-        extr = profile_rgb.as_video_stream_profile().get_extrinsics_to(profile_depth)  # noqa
-        extr_mat = np.eye(4)
-        extr_mat[:3, :3] = np.array(extr.rotation).reshape(3, 3)
-        extr_mat[:3, 3] = extr.translation
+        if len(self._cfg) == 0:
+            self.configure('default')
 
-        # Depth scale
-        depth_sensor = self.profile.get_device().first_depth_sensor()
-        depth_scale = depth_sensor.get_depth_scale()
-        # print("Depth Scale is: ", depth_scale)
+        available_devices = enumerate_connected_devices(rs.context())
+        for device_serial, product_line in available_devices:
+            pipeline = rs.pipeline()
+            cfg = self._cfg.get(device_serial, self._cfg['default'])
+            cfg.enable_device(device_serial)
+            pipeline_profile = pipeline.start(cfg)
 
-        # Write calibration data to json file
-        calib_data = {}
-        calib_data['rgb'] = []
-        calib_data['rgb'].append({
-            'width': intr_rgb.width,
-            'height': intr_rgb.height,
-            'intrinsic_mat': [intr_rgb.fx, 0, intr_rgb.ppx,
-                              0, intr_rgb.fy, intr_rgb.ppy,
-                              0, 0, 1]
-        })
-        calib_data['depth'] = []
-        calib_data['depth'].append({
-            'width': intr_depth.width,
-            'height': intr_depth.height,
-            'intrinsic_mat': [intr_depth.fx, 0, intr_depth.ppx,
-                              0, intr_depth.fy, intr_depth.ppy,
-                              0, 0, 1],
-            'depth_scale': depth_scale
-        })
-        calib_data['T_rgb_depth'] = []
-        calib_data['T_rgb_depth'].append({
-            'rotation': extr.rotation,
-            'translation': extr.translation
-        })
+            depth_sensor = pipeline_profile.get_device().first_depth_sensor()
+            if enable_ir_emitter:
+                if depth_sensor.supports(rs.option.emitter_enabled):
+                    depth_sensor.set_option(rs.option.emitter_enabled,
+                                            1 if enable_ir_emitter else 0)
+                    depth_sensor.set_option(rs.option.laser_power, 330)
 
-        self.calib_data = calib_data
+            self.enabled_devices[device_serial] = (
+                Device(pipeline, pipeline_profile, product_line))
 
-        assert os.path.exists(save_path)
-        if os.path.isfile(save_path):
-            with open(save_path, 'w') as outfile:
-                json.dump(calib_data, outfile, indent=4)
-        else:
-            with open(os.path.join(save_path, 'calib.txt'), 'w') as outfile:
-                json.dump(calib_data, outfile, indent=4)
-
-    def configure(self, fps: int = 30, device: str = None) -> None:
-        cfg = rs.config()
-        if device is not None:
-            cfg.enable_device(device)
-        # cfg.enable_device('001622070408')
-        # cfg.enable_device('001622070717')
-        cfg.enable_stream(rs.stream.depth, 848, 480, rs.format.z16, fps)
-        cfg.enable_stream(rs.stream.color, 848, 480, rs.format.bgr8, fps)
-        self.cfg = cfg
-
-    def initialize(self) -> None:
-        self.pipeline = rs.pipeline()
-        self.profile = self.pipeline.start(self.cfg)
-        # align depth to rgb frame
-        align_to = rs.stream.color
-        self.align = rs.align(align_to)
+        # align depth to color frame
+        self._align = rs.align(rs.stream.color)
 
     def run(self,
-            rgb_save_path: str = None,
-            depth_save_path: str = None,
-            timestamp_file=None,
+            color_save_path: Optional[dict] = None,
+            depth_save_path: Optional[dict] = None,
+            timestamp_file: Optional[dict] = None,
             display: bool = False) -> bool:
 
-        # while True:
-        frames = self.pipeline.wait_for_frames()
-        timestamp = frames.get_frame_metadata(
-            rs.frame_metadata_value.sensor_timestamp)
+        if len(self.enabled_devices) == 0:
+            print("No devices are enabled...")
+            return {}
 
-        aligned_frames = self.align.process(frames)
-        aligned_depth_frame = aligned_frames.get_depth_frame()
-        aligned_color_frame = aligned_frames.get_color_frame()
+        frames = {}
+        while len(frames) < len(self.enabled_devices.items()):
 
-        # Validate that both frames are valid
-        if not aligned_depth_frame or not aligned_color_frame:
-            return False, None, None
+            for dev_sn, dev in self.enabled_devices.items():
 
-        depth_image = np.asanyarray(aligned_depth_frame.get_data())
-        color_image = np.asanyarray(aligned_color_frame.get_data())
+                streams = dev.pipeline_profile.get_streams()
+                # frameset will be a pyrealsense2.composite_frame object
+                frameset = dev.pipeline.poll_for_frames()
 
-        if depth_save_path is not None:
-            np.save(os.path.join(depth_save_path, f'{timestamp}'), depth_image)
+                if frameset.size() == len(streams):
+                    frames[dev_sn] = {}
 
-        if rgb_save_path is not None:
-            np.save(os.path.join(rgb_save_path, f'{timestamp}'), color_image)
+                    frames[dev_sn]['calib'] = self.calib_data[dev_sn]
 
-        if timestamp_file is not None:
-            with open(timestamp_file, 'a+') as f:
-                f.write(f'{timestamp}\n')
+                    timestamp = frameset.get_frame_metadata(
+                        rs.frame_metadata_value.sensor_timestamp)
+                    frames[dev_sn]['timestamp'] = timestamp
 
-        if display:
-            # Render images
-            depth_colormap = cv2.applyColorMap(
-                cv2.convertScaleAbs(depth_image, alpha=0.03),
-                cv2.COLORMAP_JET)
+                    if timestamp_file is not None:
+                        with open(timestamp_file, 'a+') as f:
+                            f.write(f'{timestamp}\n')
 
-            # # Set pixels further than clipping_distance to grey
-            # clipping_distance = 10
-            # grey_color = 153
-            # # depth image is 1 channel, color is 3 channels
-            # depth_image_3d = np.dstack(
-            #     (depth_image, depth_image, depth_image))
-            # bg_removed = np.where(
-            #     (depth_image_3d > clipping_distance) | (
-            #         depth_image_3d <= 0), grey_color, color_image)
+                    aligned_frameset = self.align.process(frameset)
+                    for stream in streams:
+                        st = stream.stream_type()
+                        # if stream.stream_type() == rs.stream.infrared:
+                        #     frame = aligned_frameset.get_infrared_frame(
+                        #         stream.stream_index())
+                        #     key_ = (stream.stream_type(),
+                        #             stream.stream_index())
+                        # frame = aligned_frameset.first_or_default(st)
+                        # frame_data = frame.get_data()
+                        # frames[dev_sn][st] = frame_data
+                        if st == rs.stream.color:
+                            frame = aligned_frameset.first_or_default(st)
+                            frame_data = frame.get_data()
+                            frames[dev_sn]['color'] = frame_data
+                            if color_save_path is not None:
+                                np.save(os.path.join(color_save_path,
+                                        f'{timestamp}'), frame_data)
+                        elif st == rs.stream.depth:
+                            frame = aligned_frameset.first_or_default(st)
+                            frame = post_process_depth_frame(frame)
+                            frame_data = frame.get_data()
+                            frames[dev_sn]['depth'] = frame_data
+                            if depth_save_path is not None:
+                                np.save(os.path.join(depth_save_path,
+                                        f'{timestamp}'), frame_data)
 
-            # images = np.hstack((bg_removed, depth_colormap))
-            # images = np.hstack((color_image, depth_colormap))
+            if display:
 
-            images_overlapped = cv2.addWeighted(
-                color_image, 0.3, depth_colormap, 0.5, 0)
-            images = np.hstack(
-                (color_image, depth_colormap, images_overlapped))
+                for dev_sn, data_dict in frames.items():
 
-            cv2.namedWindow('Align overlapped', cv2.WINDOW_AUTOSIZE)
-            cv2.imshow('Align overlapped', images)
-            key = cv2.waitKey(30)
-            # Press esc or 'q' to close the image window
-            if key & 0xFF == ord('q') or key == 27:
-                cv2.destroyAllWindows()
-                cv2.waitKey(5)
-                return False, None, None
+                    # Render images
+                    depth_colormap = cv2.applyColorMap(
+                        cv2.convertScaleAbs(data_dict['depth'], alpha=0.03),
+                        cv2.COLORMAP_JET)
 
-        return True, color_image, depth_image, timestamp
+                    # # Set pixels further than clipping_distance to grey
+                    # clipping_distance = 10
+                    # grey_color = 153
+                    # # depth image is 1 channel, color is 3 channels
+                    # depth_image_3d = np.dstack(
+                    #     (depth_image, depth_image, depth_image))
+                    # bg_removed = np.where(
+                    #     (depth_image_3d > clipping_distance) | (
+                    #         depth_image_3d <= 0), grey_color, color_image)
+
+                    # images = np.hstack((bg_removed, depth_colormap))
+                    # images = np.hstack((color_image, depth_colormap))
+
+                    images_overlapped = cv2.addWeighted(
+                        data_dict['color'], 0.3, depth_colormap, 0.5, 0)
+                    images = np.hstack(
+                        (data_dict['color'], depth_colormap, images_overlapped))
+
+                    cv2.namedWindow(f'{dev_sn}', cv2.WINDOW_AUTOSIZE)
+                    cv2.imshow(f'{dev_sn}', images)
+                    key = cv2.waitKey(30)
+                    # Press esc or 'q' to close the image window
+                    if key & 0xFF == ord('q') or key == 27:
+                        cv2.destroyAllWindows()
+                        cv2.waitKey(5)
+                        return {}
+
+            return frames
+
+    def stop(self) -> None:
+        """Stops the devices. """
+        if len(self.enabled_devices) == 0:
+            print("No devices are enabled...")
+        else:
+            for _, dev in self.enabled_devices.items():
+                dev.pipeline.stop()
+
+    def save_calibration(self, save_path: dict) -> None:
+        """Saves camera calibration.
+
+        Args:
+            save_path (dict): path to save the calibration data.
+        """
+
+        if len(self.enabled_devices) == 0:
+            print("No devices are enabled...")
+            return
+
+        for dev_sn, dev in self.enabled_devices.items():
+            profile = dev.pipeline_profile
+
+            # Intrinsics of color & depth frames -------------------------------
+            profile_color = profile.get_stream(rs.stream.color)
+            intr_color = profile_color.as_video_stream_profile()
+            intr_color = intr_color.get_intrinsics()
+
+            # Fetch stream profile for depth stream
+            # Downcast to video_stream_profile and fetch intrinsics
+            profile_depth = profile.get_stream(rs.stream.depth)
+            intr_depth = profile_depth.as_video_stream_profile()
+            intr_depth = intr_depth.get_intrinsics()
+
+            # Extrinsic matrix from color sensor to Depth sensor ---------------
+            profile_vid = profile_color.as_video_stream_profile()
+            extr = profile_vid.get_extrinsics_to(profile_depth)
+            extr_mat = np.eye(4)
+            extr_mat[:3, :3] = np.array(extr.rotation).reshape(3, 3)
+            extr_mat[:3, 3] = extr.translation
+
+            # Depth scale ------------------------------------------------------
+            depth_sensor = profile.get_device().first_depth_sensor()
+            depth_scale = depth_sensor.get_depth_scale()
+            # print("Depth Scale is: ", depth_scale)
+
+            # Write calibration data to json file ------------------------------
+            calib_data = {}
+            calib_data['color'] = []
+            calib_data['color'].append({
+                'width': intr_color.width,
+                'height': intr_color.height,
+                'intrinsic_mat': [intr_color.fx, 0, intr_color.ppx,
+                                  0, intr_color.fy, intr_color.ppy,
+                                  0, 0, 1]
+            })
+            calib_data['depth'] = []
+            calib_data['depth'].append({
+                'width': intr_depth.width,
+                'height': intr_depth.height,
+                'intrinsic_mat': [intr_depth.fx, 0, intr_depth.ppx,
+                                  0, intr_depth.fy, intr_depth.ppy,
+                                  0, 0, 1],
+                'depth_scale': depth_scale
+            })
+            calib_data['T_color_depth'] = []
+            calib_data['T_color_depth'].append({
+                'rotation': extr.rotation,
+                'translation': extr.translation
+            })
+
+            self.calib_data[dev_sn] = calib_data
+
+            assert os.path.exists(save_path['dev_sn'])
+            if os.path.isfile(save_path['dev_sn']):
+                with open(save_path['dev_sn'], 'w') as outfile:
+                    json.dump(calib_data, outfile, indent=4)
+            else:
+                filename = f'dev{dev_sn}_calib.txt'
+                path = os.path.join(save_path['dev_sn'], filename)
+                with open(path, 'w') as outfile:
+                    json.dump(calib_data, outfile, indent=4)

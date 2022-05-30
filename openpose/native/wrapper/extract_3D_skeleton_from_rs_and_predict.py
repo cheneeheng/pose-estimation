@@ -21,16 +21,16 @@ from infer.inference import filter_logits
 def data_storage_setup():
     date_time = datetime.now().strftime("%y%m%d%H%M%S")
     save_path_calib = f'/data/openpose/calib/{date_time}'
-    save_path_rgb = f'/data/openpose/rgb/{date_time}'
+    save_path_color = f'/data/openpose/color/{date_time}'
     save_path_depth = f'/data/openpose/depth/{date_time}'
     save_path_skeleton = f'/data/openpose/skeleton/{date_time}'
     save_path_timestamp = f'/data/openpose/timestamp/{date_time}'
     os.makedirs(save_path_calib, exist_ok=True)
-    os.makedirs(save_path_rgb, exist_ok=True)
+    os.makedirs(save_path_color, exist_ok=True)
     os.makedirs(save_path_depth, exist_ok=True)
     os.makedirs(save_path_skeleton, exist_ok=True)
     os.makedirs(save_path_timestamp, exist_ok=True)
-    return (save_path_calib, save_path_rgb, save_path_depth,
+    return (save_path_calib, save_path_color, save_path_depth,
             save_path_skeleton, save_path_timestamp)
 
 
@@ -96,7 +96,7 @@ if __name__ == "__main__":
     # 0. Initialize ------------------------------------------------------------
 
     # STORAGE
-    sp_calib, sp_rgb, sp_depth, sp_skeleton, sp_ts = data_storage_setup()
+    sp_calib, sp_color, sp_depth, sp_skeleton, sp_ts = data_storage_setup()
     timestamp_file = os.path.join(sp_ts, 'timestamp.txt')
 
     # AAGCN
@@ -116,7 +116,7 @@ if __name__ == "__main__":
 
     # REALSENSE
     rsw = RealsenseWrapper()
-    rsw.configure(fps=30)
+    rsw.fps = 30
     rsw.initialize()
     rsw.save_calibration(save_path=sp_calib)
 
@@ -130,12 +130,21 @@ if __name__ == "__main__":
         while state:
 
             # 1. Get rs data ---------------------------------------------------
-            state, color_image, depth_image, timestamp = rsw.run(
-                rgb_save_path=sp_rgb,
+            # state, color_image, depth_image, timestamp = rsw.run(
+            frames = rsw.run(
+                color_save_path=sp_color,
                 depth_save_path=sp_depth,
                 timestamp_file=timestamp_file,
                 display=op_arg.display_rs
             )
+            state = len(frames) > 0
+            if not state:
+                continue
+
+            dev_sn = next(iter(frames))
+            color_image = frames[dev_sn]['color']
+            depth_image = frames[dev_sn]['depth']
+            timestamp = frames[dev_sn]['timestamp']
 
             # 2. Predict pose --------------------------------------------------
             # bgr format
@@ -159,7 +168,7 @@ if __name__ == "__main__":
                 print(f">>>>> {timestamp:10d} : {max_score_idxs} : {scores[max_score_idxs[1]]:.4f} -- {scores[max_score_idxs[0]]:.4f}")   # noqa
             except IndexError:
                 print(f">>>>> {timestamp:10d} : {max_score_idxs} : {scores[max_score_idxs[0]]:.4f}")   # noqa
-            except Exception as e: 
+            except Exception as e:
                 print(e)
 
             skel_data = []
@@ -176,7 +185,7 @@ if __name__ == "__main__":
                     skel3d = get_3d_skeleton(
                         skeleton=keypoint,
                         depth_img=depth_image,
-                        intr_mat=rsw.calib_data['rgb'][0]['intrinsic_mat'],
+                        intr_mat=rsw.calib_data['color'][0]['intrinsic_mat'],
                         ntu_format=op_arg.ntu_format
                     )
                     save_skel3d(skel3d, sp_skeleton, timestamp)
@@ -201,8 +210,8 @@ if __name__ == "__main__":
                 # keypoint_image = cv2.resize(keypoint_image, (1280, 720))
                 cv2.namedWindow('keypoint_image', cv2.WND_PROP_FULLSCREEN)
                 cv2.setWindowProperty('keypoint_image',
-                                     cv2.WND_PROP_FULLSCREEN,
-                                     cv2.WINDOW_FULLSCREEN)
+                                      cv2.WND_PROP_FULLSCREEN,
+                                      cv2.WINDOW_FULLSCREEN)
                 cv2.imshow('keypoint_image', keypoint_image)
 
                 # depth_image = np.clip(depth_image, 0, 10000)
@@ -215,7 +224,8 @@ if __name__ == "__main__":
                 depth_keypoint_overlay = cv2.resize(
                     depth_keypoint_overlay, (800, 450))
                 cv2.imshow("depth_keypoint_overlay", depth_keypoint_overlay)
-                cv2.moveWindow("depth_keypoint_overlay", 1500,300);
+                cv2.moveWindow("depth_keypoint_overlay", 1500, 300)
+                key = cv2.waitKey(30)
 
                 # Press esc or 'q' to close the image window
                 if key & 0xFF == ord('q') or key == 27:
@@ -277,10 +287,10 @@ if __name__ == "__main__":
             except:  # noqa
                 print("Inference error...")
 
-    except Exception as e: 
+    except Exception as e:
         print(e)
         print("Stopping realsense...")
-        rsw.pipeline.stop()
+        rsw.stop()
 
     finally:
-        rsw.pipeline.stop()
+        rsw.stop()

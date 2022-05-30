@@ -34,22 +34,22 @@ if __name__ == "__main__":
         calib_path = os.path.join(clip_path, 'calib.txt')
         calib_data = read_realsense_calibration(calib_path)
 
-        rgb_path = os.path.join(clip_path, 'rgb')
+        color_path = os.path.join(clip_path, 'color')
         depth_path = os.path.join(clip_path, 'depth')
 
-        os.makedirs(os.path.join(clip_path, 'skeleton_rgb'), exist_ok=True)
-        assert not os.listdir(os.path.join(clip_path, 'skeleton_rgb'))
+        os.makedirs(os.path.join(clip_path, 'skeleton_color'), exist_ok=True)
+        assert not os.listdir(os.path.join(clip_path, 'skeleton_color'))
 
         kpt_arr, skel_arr = None, None
 
-        for rgb_file in tqdm(sorted(os.listdir(rgb_path))):
+        for color_file in tqdm(sorted(os.listdir(color_path))):
 
-            rgb_file_path = os.path.join(rgb_path, rgb_file)
-            # rgb_file_path = '/home/chen/openpose/pexels-photo-4384679.jpeg'
-            rgb_img = cv2.imread(rgb_file_path)
-            # rgb_img = cv2.resize(rgb_img, (368, 368))
+            color_file_path = os.path.join(color_path, color_file)
+            # color_file_path = '/home/chen/openpose/pexels-photo-4384679.jpeg'
+            color_img = cv2.imread(color_file_path)
+            # color_img = cv2.resize(color_img, (368, 368))
 
-            pyop.predict(rgb_img)
+            pyop.predict(color_img)
 
             scores = pyop.pose_scores
             max_score_idx = np.argmax(scores)
@@ -70,16 +70,17 @@ if __name__ == "__main__":
                         (255, 0, 0),
                         1,
                         cv2.LINE_AA)
-            skeleton_rgb_path = rgb_file_path.replace("rgb", "skeleton_rgb")
-            skeleton_rgb_path = skeleton_rgb_path[:-4] + ".jpg"
-            cv2.imwrite(skeleton_rgb_path, keypoint_image)
+            skeleton_color_path = color_file_path.replace(
+                "color", "skeleton_color")
+            skeleton_color_path = skeleton_color_path[:-4] + ".jpg"
+            cv2.imwrite(skeleton_color_path, keypoint_image)
 
-            depth_file_path = os.path.join(depth_path, rgb_file)
+            depth_file_path = os.path.join(depth_path, color_file)
             depth_img = cv2.imread(depth_file_path, -1)
 
             skeleton3d = get_3d_skeleton(keypoint[0],
                                          depth_img,
-                                         calib_data.rgb_intrinsics)
+                                         calib_data.color_intrinsics)
             skeleton3d = np.expand_dims(skeleton3d, axis=0)
             if skel_arr is None:
                 skel_arr = np.copy(skeleton3d)

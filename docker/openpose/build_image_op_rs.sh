@@ -8,7 +8,7 @@ TARGET_TAG="openpose-librealsense:${OPENPOSE_TAG}-${LIBRS_VERSION}"
 
 echo "Building images for librealsense version ${LIBRS_VERSION} with openpose"
 DOCKER_BUILDKIT=1 docker build \
-    --file Dockerfile.Realsense \
+    --file Dockerfile.OpenposeRealsense \
     --target openpose-librealsense \
     --build-arg LIBRS_VERSION=${LIBRS_VERSION} \
     --build-arg OPENPOSE_IMAGE_ARG="openpose:${OPENPOSE_TAG}" \

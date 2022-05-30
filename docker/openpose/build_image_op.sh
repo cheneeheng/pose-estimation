@@ -4,7 +4,7 @@ IMAGE_NAME="openpose:cuda10.2-cudnn7-devel-ubuntu18.04"
 
 echo "Building image : ${IMAGE_NAME}"
 DOCKER_BUILDKIT=1 docker build \
-    --file Dockerfile.OpenPose \
+    --file Dockerfile.Openpose \
     --build-arg UNAME_ARG=$1 \
     --build-arg UID_ARG=$2 \
     --tag ${IMAGE_NAME} \
