@@ -14,12 +14,13 @@ from realsense import StoragePaths
 class OpenposeStoragePaths(StoragePaths):
     def __init__(self, device_sn: str = ''):
         super().__init__()
+        base_path = '/data/openpose'
         date_time = datetime.now().strftime("%y%m%d%H%M%S")
-        self.calib = f'/data/openpose/calib/dev{device_sn}_{date_time}'
-        self.color = f'/data/openpose/color/dev{device_sn}_{date_time}'
-        self.depth = f'/data/openpose/depth/dev{device_sn}_{date_time}'
-        self.skeleton = f'/data/openpose/skeleton/dev{device_sn}_{date_time}'
-        self.timestamp = f'/data/openpose/timestamp/dev{device_sn}_{date_time}'
+        self.calib = f'{base_path}/calib/dev{device_sn}_{date_time}'
+        self.color = f'{base_path}/color/dev{device_sn}_{date_time}'
+        self.depth = f'{base_path}/depth/dev{device_sn}_{date_time}'
+        self.skeleton = f'{base_path}/skeleton/dev{device_sn}_{date_time}'
+        self.timestamp = f'{base_path}/timestamp/dev{device_sn}_{date_time}'
         self.timestamp_file = os.path.join(self.timestamp, 'timestamp.txt')
         os.makedirs(self.calib, exist_ok=True)
         os.makedirs(self.color, exist_ok=True)
@@ -29,9 +30,8 @@ class OpenposeStoragePaths(StoragePaths):
 
 
 def save_skeleton_3d(skeleton_3d: np.ndarray, skeleton_save_path: str) -> None:
-    skeleton_3d_str = ",".join([str(pos)
-                                for skel in skeleton_3d.tolist()
-                                for pos in skel])
+    skeleton_3d_str = ",".join(
+        [str(pos) for skel in skeleton_3d.tolist() for pos in skel])
     with open(skeleton_save_path, 'a+') as f:
         f.write(f'{skeleton_3d_str}\n')
 
@@ -189,8 +189,7 @@ if __name__ == "__main__":
                 storage_paths=opsp,
                 display=arg.display_rs
             )
-            state = len(frames) > 0
-            if not state:
+            if not len(frames) > 0:
                 continue
 
             for dev_sn, data_dict in frames.items():
@@ -206,7 +205,7 @@ if __name__ == "__main__":
                 # 3. Save data -------------------------------------------------
                 if arg.save_skel:
                     intr_mat = calib['color'][0]['intrinsic_mat']
-                    skel_save_path = os.path.join(opsp[dev_sn]['skeleton'],
+                    skel_save_path = os.path.join(opsp[dev_sn].skeleton,
                                                   f'{timestamp:020d}' + '.txt')
                     save_skel(pyop, arg, depth_image, intr_mat,
                               empty_skeleton_3d, skel_save_path)

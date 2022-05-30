@@ -106,6 +106,51 @@ class RealsenseWrapper(object):
         # align depth to color frame
         self._align = rs.align(rs.stream.color)
 
+    def set_ir_laser_power(self, power: int = 330):
+        # https://github.com/IntelRealSense/librealsense/issues/1258
+        for _, dev in self.enabled_devices:
+            sensor = dev.pipeline_profile.get_device().first_depth_sensor()
+            if sensor.supports(rs.option.emitter_enabled):
+                ir_range = sensor.get_option_range(rs.option.laser_power)
+                if power + 10 > ir_range.max:
+                    sensor.set_option(rs.option.laser_power, ir_range.max)
+                else:
+                    sensor.set_option(rs.option.laser_power, power + 10)
+
+    def display_rs_data(self, frames: dict) -> bool:
+        terminate = False
+        for dev_sn, data_dict in frames.items():
+            # Render images
+            depth_colormap = cv2.applyColorMap(
+                cv2.convertScaleAbs(data_dict['depth'], alpha=0.03),
+                cv2.COLORMAP_JET)
+            # # Set pixels further than clipping_distance to grey
+            # clipping_distance = 10
+            # grey_color = 153
+            # # depth image is 1 channel, color is 3 channels
+            # depth_image_3d = np.dstack(
+            #     (depth_image, depth_image, depth_image))
+            # bg_removed = np.where(
+            #     (depth_image_3d > clipping_distance) | (
+            #         depth_image_3d <= 0), grey_color, color_image)
+            # images = np.hstack((bg_removed, depth_colormap))
+            # images = np.hstack((color_image, depth_colormap))
+            images_overlapped = cv2.addWeighted(
+                data_dict['color'], 0.3, depth_colormap, 0.5, 0)
+            images = np.hstack(
+                (data_dict['color'], depth_colormap, images_overlapped))
+
+            cv2.namedWindow(f'{dev_sn}', cv2.WINDOW_AUTOSIZE)
+            cv2.imshow(f'{dev_sn}', images)
+            key = cv2.waitKey(30)
+            # Press esc or 'q' to close the image window
+            if key & 0xFF == ord('q') or key == 27:
+                cv2.destroyAllWindows()
+                cv2.waitKey(5)
+                terminate = True
+
+        return terminate
+
     def run(self,
             storage_paths: Optional[StoragePaths] = None,
             display: bool = False) -> bool:
@@ -120,7 +165,6 @@ class RealsenseWrapper(object):
             for dev_sn, dev in self.enabled_devices.items():
 
                 streams = dev.pipeline_profile.get_streams()
-                # frameset will be a pyrealsense2.composite_frame object
                 frameset = dev.pipeline.poll_for_frames()
 
                 if frameset.size() == len(streams):
@@ -150,7 +194,7 @@ class RealsenseWrapper(object):
                         # frames[dev_sn][st] = frame_data
                         if st == rs.stream.color:
                             frame = aligned_frameset.first_or_default(st)
-                            frame_data = frame.get_data()
+                            frame_data = np.asanyarray(frame.get_data())
                             frames[dev_sn]['color'] = frame_data
                             filepath = storage_paths[dev_sn].color
                             if filepath is not None:
@@ -159,7 +203,7 @@ class RealsenseWrapper(object):
                         elif st == rs.stream.depth:
                             frame = aligned_frameset.first_or_default(st)
                             frame = post_process_depth_frame(frame)
-                            frame_data = frame.get_data()
+                            frame_data = np.asanyarray(frame.get_data())
                             frames[dev_sn]['depth'] = frame_data
                             filepath = storage_paths[dev_sn].depth
                             if filepath is not None:
@@ -167,40 +211,8 @@ class RealsenseWrapper(object):
                                         frame_data)
 
             if display:
-
-                for dev_sn, data_dict in frames.items():
-
-                    # Render images
-                    depth_colormap = cv2.applyColorMap(
-                        cv2.convertScaleAbs(data_dict['depth'], alpha=0.03),
-                        cv2.COLORMAP_JET)
-
-                    # # Set pixels further than clipping_distance to grey
-                    # clipping_distance = 10
-                    # grey_color = 153
-                    # # depth image is 1 channel, color is 3 channels
-                    # depth_image_3d = np.dstack(
-                    #     (depth_image, depth_image, depth_image))
-                    # bg_removed = np.where(
-                    #     (depth_image_3d > clipping_distance) | (
-                    #         depth_image_3d <= 0), grey_color, color_image)
-
-                    # images = np.hstack((bg_removed, depth_colormap))
-                    # images = np.hstack((color_image, depth_colormap))
-
-                    images_overlapped = cv2.addWeighted(
-                        data_dict['color'], 0.3, depth_colormap, 0.5, 0)
-                    images = np.hstack(
-                        (data_dict['color'], depth_colormap, images_overlapped))
-
-                    cv2.namedWindow(f'{dev_sn}', cv2.WINDOW_AUTOSIZE)
-                    cv2.imshow(f'{dev_sn}', images)
-                    key = cv2.waitKey(30)
-                    # Press esc or 'q' to close the image window
-                    if key & 0xFF == ord('q') or key == 27:
-                        cv2.destroyAllWindows()
-                        cv2.waitKey(5)
-                        return {}
+                if self.display_rs_data(frames):
+                    return {}
 
             return frames
 
