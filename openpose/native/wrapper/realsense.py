@@ -265,12 +265,12 @@ class RealsenseWrapper(object):
 
             self.calib_data[dev_sn] = calib_data
 
-            assert os.path.exists(save_path['dev_sn'])
-            if os.path.isfile(save_path['dev_sn']):
-                with open(save_path['dev_sn'], 'w') as outfile:
+            assert os.path.exists(save_path[dev_sn])
+            if os.path.isfile(save_path[dev_sn]):
+                with open(save_path[dev_sn], 'w') as outfile:
                     json.dump(calib_data, outfile, indent=4)
             else:
                 filename = f'dev{dev_sn}_calib.txt'
-                path = os.path.join(save_path['dev_sn'], filename)
+                path = os.path.join(save_path[dev_sn], filename)
                 with open(path, 'w') as outfile:
                     json.dump(calib_data, outfile, indent=4)

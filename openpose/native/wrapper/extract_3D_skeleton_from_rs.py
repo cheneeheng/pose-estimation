@@ -181,7 +181,7 @@ if __name__ == "__main__":
     rsw.fps = arg.fps
     rsw.initialize()
 
-    sps = {sn: StoragePaths(sn) for sn in rsw.enabled_devices()}
+    sps = {sn: StoragePaths(sn) for sn in rsw.enabled_devices}
     color_paths = {k: v.color for k, v in sps.items()}
     depth_paths = {k: v.depth for k, v in sps.items()}
     skeleton_paths = {k: v.skeleton for k, v in sps.items()}
@@ -225,7 +225,7 @@ if __name__ == "__main__":
 
     except:  # noqa
         print("Stopping realsense...")
-        rsw.pipeline.stop()
+        rsw.stop()
 
     finally:
-        rsw.pipeline.stop()
+        rsw.stop()

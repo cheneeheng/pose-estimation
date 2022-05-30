@@ -118,7 +118,7 @@ if __name__ == "__main__":
     rsw = RealsenseWrapper()
     rsw.fps = 30
     rsw.initialize()
-    dev_sn = list(rsw.enabled_devices().keys())[0]
+    dev_sn = list(rsw.enabled_devices.keys())[0]
     rsw.save_calibration(save_path={dev_sn: sp_calib})
 
     state = True
