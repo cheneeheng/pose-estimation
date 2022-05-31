@@ -6,9 +6,9 @@ import pyrealsense2 as rs
 
 from typing import Optional, Dict, List
 
-from realsense_device_manager import Device
-from realsense_device_manager import enumerate_connected_devices
-from realsense_device_manager import post_process_depth_frame
+from .realsense_device_manager import Device
+from .realsense_device_manager import enumerate_connected_devices
+from .realsense_device_manager import post_process_depth_frame
 
 
 def read_realsense_calibration(file_path: str):

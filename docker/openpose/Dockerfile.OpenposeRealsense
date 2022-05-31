@@ -70,6 +70,9 @@ COPY --from=librealsense-builder /usr/src/librealsense/config/99-realsense-libus
 ENV PYTHONPATH=$PYTHONPATH:/usr/local/lib
 
 # Install dep packages
+RUN apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/3bf863cc.pub
+RUN apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu1804/x86_64/7fa2af80.pub
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \	
     libusb-1.0-0 \
@@ -81,6 +84,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 USER ${UNAME_ARG}
+
+WORKDIR /code/pose-estimation
 
 # Shows a list of connected Realsense devices
 CMD [ "rs-enumerate-devices", "--compact" ]

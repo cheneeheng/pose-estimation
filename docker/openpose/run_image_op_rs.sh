@@ -8,7 +8,7 @@ TARGET_TAG="openpose-librealsense:${OPENPOSE_TAG}-${LIBRS_VERSION}"
 
 # DATA_PATH="/mnt/DHM-ICU-DS1/data/testing"
 # DATA_PATH="/home/dhm/workspace/demo_event/data/openpose"
-# CODE_PATH="/home/dhm/workspace/demo_event/code/pose-estimation/openpose"
+# CODE_PATH="/home/dhm/workspace/demo_event/code/pose-estimation"
 
 DATA_PATH=$2
 CODE_PATH=$3
@@ -20,10 +20,10 @@ docker run -it --rm --gpus=all \
     -v /dev:/dev \
     --env DISPLAY=:3 \
     --env QT_X11_NO_MITSHM=1 \
-    --env PYTHONPATH=/usr/local/lib:/code/pose-estimation/openpose/native/wrapper/2s_agcn \
+    --env PYTHONPATH=/usr/local/lib:/code/pose-estimation:/code/pose-estimation/openpose:/code/pose-estimation/openpose/native/wrapper/2s_agcn \
     --device-cgroup-rule "c 81:* rmw" \
     --device-cgroup-rule "c 189:* rmw" \
     --mount type=bind,source=/tmp/.X11-unix,target=/tmp/.X11-unix \
-    --mount type=bind,source=${CODE_PATH},target=/code/pose-estimation/openpose \
+    --mount type=bind,source=${CODE_PATH},target=/code/pose-estimation \
     --mount type=bind,source=${DATA_PATH},target=/data/openpose \
     ${TARGET_TAG} $1
