@@ -4,7 +4,7 @@ import numpy as np
 import os
 import pyrealsense2 as rs
 
-from typing import Optional
+from typing import Optional, Type
 
 from realsense.realsense_device_manager import Device
 from realsense.realsense_device_manager import enumerate_connected_devices
@@ -34,7 +34,6 @@ class StoragePaths:
         self.calib = None
         self.color = None
         self.depth = None
-        self.skeleton = None
         self.timestamp = None
         self.timestamp_file = None
 
@@ -63,18 +62,23 @@ class RealsenseWrapper:
 
     """
 
-    def __init__(self) -> None:
+    def __init__(self,
+                 storage_paths_fn: Optional[Type[StoragePaths]] = None) -> None:
         super().__init__()
-        # configurations
-        self._rs_cfg = {}
-        self.stream_config = StreamConfig()
-        self.storage_paths = {}
         # device data
         self.available_devices = enumerate_connected_devices(rs.context())
         self.enabled_devices = {}  # serial numbers of enabled devices
         self.calib_data = {}
         # rs align method
         self._align = rs.align(rs.stream.color)  # align depth to color frame
+        # configurations
+        self._rs_cfg = {}
+        self.stream_config = StreamConfig()
+        if storage_paths_fn is not None:
+            self.storage_paths_per_dev = {sn: storage_paths_fn(sn)
+                                          for sn, _ in self.available_devices}
+        else:
+            self.storage_paths_per_dev = {}
 
     def configure_stream(self, device_sn: Optional[str] = None) -> None:
         """Defines per device stream configurations.
@@ -123,7 +127,8 @@ class RealsenseWrapper:
                 Device(pipeline, pipeline_profile, product_line))
 
     def set_storage_paths(self, paths: StoragePaths) -> None:
-        self.storage_paths = {sn: paths(sn) for sn in self.enabled_devices}
+        self.storage_paths_per_dev = {sn: paths(sn)
+                                      for sn in self.enabled_devices}
 
     def set_ir_laser_power(self, power: int = 300):
         """Sets the power of the IR laser. If power value is too high the
@@ -164,7 +169,7 @@ class RealsenseWrapper:
 
             for dev_sn, dev in self.enabled_devices.items():
 
-                storage_paths = self.storage_paths.get(dev_sn, None)
+                storage_paths = self.storage_paths_per_dev.get(dev_sn, None)
 
                 streams = dev.pipeline_profile.get_streams()
                 frameset = dev.pipeline.poll_for_frames()
@@ -275,7 +280,7 @@ class RealsenseWrapper:
 
         for dev_sn, dev in self.enabled_devices.items():
 
-            storage_paths = self.storage_paths.get(dev_sn, None)
+            storage_paths = self.storage_paths_per_dev.get(dev_sn, None)
             if storage_paths is None:
                 continue
 
