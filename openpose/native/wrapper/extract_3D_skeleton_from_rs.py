@@ -151,8 +151,7 @@ def get_parser():
 
 if __name__ == "__main__":
 
-    parser = get_parser()
-    arg = parser.parse_args()
+    arg = get_parser().parse_args()
 
     state = True
     empty_skeleton_3d = np.zeros((25, 3))
@@ -169,26 +168,16 @@ if __name__ == "__main__":
 
     # REALSENSE # STORAGE
     rsw = RealsenseWrapper()
-    rsw.fps = arg.fps
+    rsw.stream_config.fps = 30
     rsw.initialize()
-
-    opsp = {sn: OpenposeStoragePaths(sn) for sn in rsw.enabled_devices}
-    # color_paths = {k: v.color for k, v in sps.items()}
-    # depth_paths = {k: v.depth for k, v in sps.items()}
-    # skeleton_paths = {k: v.skeleton for k, v in sps.items()}
-    # timestamp_file_paths = {k: v.timestamp_file for k, v in sps.items()}
-    # calib_paths = {k: v.calib for k, v in sps.items()}
-
-    rsw.save_calibration(storage_paths=opsp)
+    rsw.set_storage_paths(OpenposeStoragePaths)
+    rsw.save_calibration()
 
     try:
         while state:
 
             # 1. Get rs data ---------------------------------------------------
-            frames = rsw.run(
-                storage_paths=opsp,
-                display=arg.display_rs
-            )
+            frames = rsw.run(display=arg.display_rs)
             if not len(frames) > 0:
                 continue
 
@@ -205,8 +194,10 @@ if __name__ == "__main__":
                 # 3. Save data -------------------------------------------------
                 if arg.save_skel:
                     intr_mat = calib['color'][0]['intrinsic_mat']
-                    skel_save_path = os.path.join(opsp[dev_sn].skeleton,
-                                                  f'{timestamp:020d}' + '.txt')
+                    skel_save_path = os.path.join(
+                        rsw.storage_paths[dev_sn].skeleton,
+                        f'{timestamp:020d}' + '.txt'
+                    )
                     save_skel(pyop, arg, depth_image, intr_mat,
                               empty_skeleton_3d, skel_save_path)
 

@@ -20,20 +20,20 @@ class PyOpenPoseNative(object):
         self.opWrapper.configure(params)
         self.datum = op.Datum()
 
-    def configure(self, params: dict = None):
+    def configure(self, params: dict = None) -> None:
         if params is not None:
             self.opWrapper.configure(params)
 
-    def initialize(self):
+    def initialize(self) -> None:
         # Starting OpenPose
         self.opWrapper.start()
 
-    def predict(self, image):
+    def predict(self, image: np.ndarray) -> None:
         self.datum.cvInputData = image
         self.opWrapper.emplaceAndPop(op.VectorDatum([self.datum]))
 
     @property
-    def opencv_image(self):
+    def opencv_image(self) -> np.ndarray:
         return self.datum.cvOutputData
 
     @property

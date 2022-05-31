@@ -4,7 +4,7 @@ import numpy as np
 import os
 import pyrealsense2 as rs
 
-from typing import Optional
+from typing import Optional, Dict, List
 
 from realsense_device_manager import Device
 from realsense_device_manager import enumerate_connected_devices
@@ -29,7 +29,7 @@ def read_realsense_calibration(file_path: str):
     return RealsenseConfig(calib)
 
 
-class StoragePaths(object):
+class StoragePaths:
     def __init__(self):
         self.calib = None
         self.color = None
@@ -39,75 +39,101 @@ class StoragePaths(object):
         self.timestamp_file = None
 
 
-class RealsenseWrapper(object):
-
-    def __init__(self) -> None:
-        super().__init__()
-        self._cfg = {}
-        self.enabled_devices = {}  # serial numbers of enabled devices
-        self._align = None
-        self.calib_data = {}
+class StreamConfig:
+    def __init__(self):
         self.fps = 30
         self.height = 480
         self.width = 848
 
-    def configure(self,
-                  device_sn: Optional[str] = None,
-                  fps: Optional[int] = None,
-                  height: Optional[int] = None,
-                  width: Optional[int] = None) -> None:
-        """Defines per device configurations.
+    @property
+    def data(self) -> dict:
+        return {
+            'width': self.width,
+            'height': self.height,
+            'framerate': self.fps
+        }
+
+
+class RealsenseWrapper:
+    """Wrapper to run multiple realsense cameras.
+
+    Code is written based on "realsense_device_manager.py" . Currently the
+    code supports only reading depth and color images. Reading of IR stream
+    is not implemented.
+
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        # configurations
+        self._rs_cfg = {}
+        self.stream_config = StreamConfig()
+        self.storage_paths = {}
+        # device data
+        self.available_devices = enumerate_connected_devices(rs.context())
+        self.enabled_devices = {}  # serial numbers of enabled devices
+        self.calib_data = {}
+        # rs align method
+        self._align = rs.align(rs.stream.color)  # align depth to color frame
+
+    def configure_stream(self, device_sn: Optional[str] = None) -> None:
+        """Defines per device stream configurations.
 
         device('001622070408')
         device('001622070717')
 
         Args:
             device_sn (str, optional): serial number. Defaults to None.
-            fps (int, optional): frame fps. Defaults to 30.
-            height (int, optional): frame height. Defaults to 480.
-            width (int, optional): frame width. Defaults to 848.
         """
         if device_sn is not None:
             cfg = rs.config()
-            cfg.enable_stream(rs.stream.depth,
-                              width if width is not None else self.width,
-                              height if height is not None else self.height,
-                              rs.format.z16,
-                              fps if fps is not None else self.fps)
-            cfg.enable_stream(rs.stream.color,
-                              width if width is not None else self.width,
-                              height if height is not None else self.height,
-                              rs.format.bgr8,
-                              fps if fps is not None else self.fps)
-            self._cfg[device_sn] = cfg
+            cfg.enable_stream(stream_type=rs.stream.depth,
+                              format=rs.format.z16,
+                              **self.stream_config.data)
+            cfg.enable_stream(stream_type=rs.stream.color,
+                              format=rs.format.bgr8,
+                              **self.stream_config.data)
+            self._rs_cfg[device_sn] = cfg
 
     def initialize(self, enable_ir_emitter: bool = True) -> None:
+        """Initializes the device pipelines and starts them.
 
-        if len(self._cfg) == 0:
-            self.configure('default')
+        Args:
+            enable_ir_emitter (bool, optional): Enable the IR for beter
+                depth quality. Defaults to True.
+        """
+        if len(self._rs_cfg) == 0:
+            self.configure_stream('default')
 
-        available_devices = enumerate_connected_devices(rs.context())
-        for device_serial, product_line in available_devices:
+        for device_serial, product_line in self.available_devices:
+            # Pipeline
             pipeline = rs.pipeline()
-            cfg = self._cfg.get(device_serial, self._cfg['default'])
+            cfg = self._rs_cfg.get(device_serial, self._rs_cfg['default'])
             cfg.enable_device(device_serial)
             pipeline_profile = pipeline.start(cfg)
-
+            # IR for depth
             depth_sensor = pipeline_profile.get_device().first_depth_sensor()
             if enable_ir_emitter:
                 if depth_sensor.supports(rs.option.emitter_enabled):
                     depth_sensor.set_option(rs.option.emitter_enabled,
                                             1 if enable_ir_emitter else 0)
                     # depth_sensor.set_option(rs.option.laser_power, 330)
-
+            # Stored the enabled devices
             self.enabled_devices[device_serial] = (
                 Device(pipeline, pipeline_profile, product_line))
 
-        # align depth to color frame
-        self._align = rs.align(rs.stream.color)
+    def set_storage_paths(self, paths: StoragePaths) -> None:
+        self.storage_paths = {sn: paths(sn) for sn in self.enabled_devices}
 
-    def set_ir_laser_power(self, power: int = 330):
-        # https://github.com/IntelRealSense/librealsense/issues/1258
+    def set_ir_laser_power(self, power: int = 300):
+        """Sets the power of the IR laser. If power value is too high the
+        rs connection will crash.
+
+        https://github.com/IntelRealSense/librealsense/issues/1258
+
+        Args:
+            power (int, optional): IR power. Defaults to 300.
+        """
         for _, dev in self.enabled_devices:
             sensor = dev.pipeline_profile.get_device().first_depth_sensor()
             if sensor.supports(rs.option.emitter_enabled):
@@ -116,6 +142,93 @@ class RealsenseWrapper(object):
                     sensor.set_option(rs.option.laser_power, ir_range.max)
                 else:
                     sensor.set_option(rs.option.laser_power, power + 10)
+
+    def run(self, display: bool = False) -> dict:
+        """Gets the frames streamed from the enabled rs devices.
+
+        Args:
+            display (bool, optional): Whether to display the retrieved frames.
+                Defaults to False.
+
+        Returns:
+            dict: Empty dict or {serial_number: {data_type: data}}.
+                data_type = color, depth, timestamp, calib
+        """
+        if len(self.enabled_devices) == 0:
+            print("No devices are enabled...")
+            return {}
+
+        frames = {}
+        while len(frames) < len(self.enabled_devices.items()):
+
+            for dev_sn, dev in self.enabled_devices.items():
+
+                storage_paths = self.storage_paths.get(dev_sn, None)
+
+                streams = dev.pipeline_profile.get_streams()
+                frameset = dev.pipeline.poll_for_frames()
+
+                if frameset.size() == len(streams):
+                    frames[dev_sn] = {}
+
+                    frames[dev_sn]['calib'] = self.calib_data[dev_sn]
+
+                    timestamp = frameset.get_frame_metadata(
+                        rs.frame_metadata_value.sensor_timestamp)
+                    frames[dev_sn]['timestamp'] = timestamp
+
+                    if storage_paths is not None:
+                        ts_file = storage_paths.timestamp_file
+                        if ts_file is not None:
+                            with open(ts_file, 'a+') as f:
+                                f.write(f'{timestamp}\n')
+
+                    aligned_frameset = self._align.process(frameset)
+                    for stream in streams:
+                        st = stream.stream_type()
+                        # if stream.stream_type() == rs.stream.infrared:
+                        #     frame = aligned_frameset.get_infrared_frame(
+                        #         stream.stream_index())
+                        #     key_ = (stream.stream_type(),
+                        #             stream.stream_index())
+                        # frame = aligned_frameset.first_or_default(st)
+                        # frame_data = frame.get_data()
+                        # frames[dev_sn][st] = frame_data
+                        if st == rs.stream.color:
+                            frame = aligned_frameset.first_or_default(st)
+                            frame_data = np.asanyarray(frame.get_data())
+                            frames[dev_sn]['color'] = frame_data
+                            if storage_paths is not None:
+                                filepath = storage_paths.color
+                                if filepath is not None:
+                                    np.save(
+                                        os.path.join(filepath, f'{timestamp}'),
+                                        frame_data)
+                        elif st == rs.stream.depth:
+                            frame = aligned_frameset.first_or_default(st)
+                            frame = post_process_depth_frame(frame)
+                            frame_data = np.asanyarray(frame.get_data())
+                            frames[dev_sn]['depth'] = frame_data
+                            if storage_paths is not None:
+                                filepath = storage_paths.depth
+                                if filepath is not None:
+                                    np.save(
+                                        os.path.join(filepath, f'{timestamp}'),
+                                        frame_data)
+
+            if display:
+                if self.display_rs_data(frames):
+                    return {}
+
+            return frames
+
+    def stop(self) -> None:
+        """Stops the devices. """
+        if len(self.enabled_devices) == 0:
+            print("No devices are enabled...")
+        else:
+            for _, dev in self.enabled_devices.items():
+                dev.pipeline.stop()
 
     def display_rs_data(self, frames: dict) -> bool:
         terminate = False
@@ -151,91 +264,19 @@ class RealsenseWrapper(object):
 
         return terminate
 
-    def run(self,
-            storage_paths: Optional[StoragePaths] = None,
-            display: bool = False) -> bool:
-
-        if len(self.enabled_devices) == 0:
-            print("No devices are enabled...")
-            return {}
-
-        frames = {}
-        while len(frames) < len(self.enabled_devices.items()):
-
-            for dev_sn, dev in self.enabled_devices.items():
-
-                streams = dev.pipeline_profile.get_streams()
-                frameset = dev.pipeline.poll_for_frames()
-
-                if frameset.size() == len(streams):
-                    frames[dev_sn] = {}
-
-                    frames[dev_sn]['calib'] = self.calib_data[dev_sn]
-
-                    timestamp = frameset.get_frame_metadata(
-                        rs.frame_metadata_value.sensor_timestamp)
-                    frames[dev_sn]['timestamp'] = timestamp
-
-                    ts_file = storage_paths[dev_sn].timestamp_file
-                    if ts_file is not None:
-                        with open(ts_file, 'a+') as f:
-                            f.write(f'{timestamp}\n')
-
-                    aligned_frameset = self._align.process(frameset)
-                    for stream in streams:
-                        st = stream.stream_type()
-                        # if stream.stream_type() == rs.stream.infrared:
-                        #     frame = aligned_frameset.get_infrared_frame(
-                        #         stream.stream_index())
-                        #     key_ = (stream.stream_type(),
-                        #             stream.stream_index())
-                        # frame = aligned_frameset.first_or_default(st)
-                        # frame_data = frame.get_data()
-                        # frames[dev_sn][st] = frame_data
-                        if st == rs.stream.color:
-                            frame = aligned_frameset.first_or_default(st)
-                            frame_data = np.asanyarray(frame.get_data())
-                            frames[dev_sn]['color'] = frame_data
-                            filepath = storage_paths[dev_sn].color
-                            if filepath is not None:
-                                np.save(os.path.join(filepath, f'{timestamp}'),
-                                        frame_data)
-                        elif st == rs.stream.depth:
-                            frame = aligned_frameset.first_or_default(st)
-                            frame = post_process_depth_frame(frame)
-                            frame_data = np.asanyarray(frame.get_data())
-                            frames[dev_sn]['depth'] = frame_data
-                            filepath = storage_paths[dev_sn].depth
-                            if filepath is not None:
-                                np.save(os.path.join(filepath, f'{timestamp}'),
-                                        frame_data)
-
-            if display:
-                if self.display_rs_data(frames):
-                    return {}
-
-            return frames
-
-    def stop(self) -> None:
-        """Stops the devices. """
-        if len(self.enabled_devices) == 0:
-            print("No devices are enabled...")
-        else:
-            for _, dev in self.enabled_devices.items():
-                dev.pipeline.stop()
-
-    def save_calibration(self, storage_paths: StoragePaths) -> None:
-        """Saves camera calibration.
-
-        Args:
-            save_path (dict): path to save the calibration data.
-        """
+    def save_calibration(self) -> None:
+        """Saves camera calibration. """
 
         if len(self.enabled_devices) == 0:
             print("No devices are enabled...")
             return
 
         for dev_sn, dev in self.enabled_devices.items():
+
+            storage_paths = self.storage_paths.get(dev_sn, None)
+            if storage_paths is None:
+                continue
+
             profile = dev.pipeline_profile
 
             # Intrinsics of color & depth frames -------------------------------
@@ -288,12 +329,12 @@ class RealsenseWrapper(object):
 
             self.calib_data[dev_sn] = calib_data
 
-            assert os.path.exists(storage_paths[dev_sn].calib)
-            if os.path.isfile(storage_paths[dev_sn].calib):
-                with open(storage_paths[dev_sn].calib, 'w') as outfile:
+            assert os.path.exists(storage_paths.calib)
+            if os.path.isfile(storage_paths.calib):
+                with open(storage_paths.calib, 'w') as outfile:
                     json.dump(calib_data, outfile, indent=4)
             else:
                 filename = f'dev{dev_sn}_calib.txt'
-                path = os.path.join(storage_paths[dev_sn].calib, filename)
+                path = os.path.join(storage_paths.calib, filename)
                 with open(path, 'w') as outfile:
                     json.dump(calib_data, outfile, indent=4)

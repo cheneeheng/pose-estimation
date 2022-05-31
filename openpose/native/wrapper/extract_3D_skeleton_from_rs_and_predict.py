@@ -5,8 +5,10 @@ import os
 
 from datetime import datetime
 
+from extract_3D_skeleton_from_rs import OpenposeStoragePaths
+from extract_3D_skeleton_from_rs import display_skel
+from extract_3D_skeleton_from_rs import save_skel
 from skeleton import PyOpenPoseNative
-from skeleton import get_3d_skeleton
 from realsense import RealsenseWrapper
 
 from infer.inference import parse_arg
@@ -16,31 +18,6 @@ from infer.inference import init_preprocessor
 from infer.inference import init_model
 from infer.inference import model_inference
 from infer.inference import filter_logits
-
-
-def data_storage_setup():
-    date_time = datetime.now().strftime("%y%m%d%H%M%S")
-    save_path_calib = f'/data/openpose/calib/{date_time}'
-    save_path_color = f'/data/openpose/color/{date_time}'
-    save_path_depth = f'/data/openpose/depth/{date_time}'
-    save_path_skeleton = f'/data/openpose/skeleton/{date_time}'
-    save_path_timestamp = f'/data/openpose/timestamp/{date_time}'
-    os.makedirs(save_path_calib, exist_ok=True)
-    os.makedirs(save_path_color, exist_ok=True)
-    os.makedirs(save_path_depth, exist_ok=True)
-    os.makedirs(save_path_skeleton, exist_ok=True)
-    os.makedirs(save_path_timestamp, exist_ok=True)
-    return (save_path_calib, save_path_color, save_path_depth,
-            save_path_skeleton, save_path_timestamp)
-
-
-def save_skel3d(skel3d, sp_skeleton, timestamp):
-    skel_file = os.path.join(sp_skeleton, f'{timestamp:020d}' + '.txt')
-    skel3d_str = ",".join([str(pos)
-                           for skel in skel3d.tolist()
-                           for pos in skel])
-    with open(skel_file, 'a+') as f:
-        f.write(f'{skel3d_str}\n')
 
 
 def get_parser():
@@ -94,11 +71,6 @@ if __name__ == "__main__":
     [agcn_arg, _] = parse_arg(get_agcn_parser())
 
     # 0. Initialize ------------------------------------------------------------
-
-    # STORAGE
-    sp_calib, sp_color, sp_depth, sp_skeleton, sp_ts = data_storage_setup()
-    timestamp_file = os.path.join(sp_ts, 'timestamp.txt')
-
     # AAGCN
     MAPPING, _, output_dir = init_file_and_folders(agcn_arg)
     DataProc = init_preprocessor(agcn_arg)
@@ -114,15 +86,18 @@ if __name__ == "__main__":
     pyop = PyOpenPoseNative(params)
     pyop.initialize()
 
-    # REALSENSE
+    # REALSENSE +  STORAGE
     rsw = RealsenseWrapper()
-    rsw.fps = 30
+    rsw.stream_config.fps = 30
+    rsw.available_devices = rsw.available_devices[0:1]
     rsw.initialize()
-    dev_sn = list(rsw.enabled_devices.keys())[0]
-    rsw.save_calibration(save_path={dev_sn: sp_calib})
+    rsw.set_storage_paths(OpenposeStoragePaths)
+    rsw.save_calibration()
+
+    dev_sn = rsw.available_devices[0]
 
     state = True
-    empty_skel3d = np.zeros((25, 3))
+    empty_skeleton_3d = np.zeros((25, 3))
 
     mva = 5
     mva_list = []
@@ -132,12 +107,7 @@ if __name__ == "__main__":
 
             # 1. Get rs data ---------------------------------------------------
             # state, color_image, depth_image, timestamp = rsw.run(
-            frames = rsw.run(
-                color_save_path={dev_sn: sp_color},
-                depth_save_path={dev_sn: sp_depth},
-                timestamp_file={dev_sn: timestamp_file},
-                display=op_arg.display_rs
-            )
+            frames = rsw.run(display=op_arg.display_rs)
             state = len(frames) > 0
             if not state:
                 continue
@@ -145,62 +115,28 @@ if __name__ == "__main__":
             color_image = frames[dev_sn]['color']
             depth_image = frames[dev_sn]['depth']
             timestamp = frames[dev_sn]['timestamp']
+            calib = frames[dev_sn]['calib']
 
             # 2. Predict pose --------------------------------------------------
             # bgr format
             pyop.predict(color_image)
 
-            # 3. Get prediction scores -----------------------------------------
-            scores = pyop.pose_scores
-
-            # 3.a. Save empty array if scores is None (no skeleton at all) -----
-            if scores is None:
-                for _ in range(op_arg.max_true_body):
-                    save_skel3d(empty_skel3d, sp_skeleton, timestamp)
-                print("No skeleton detected...")
-                DataProc.append_data(np.zeros((2, 1, agcn_arg.num_joint, 3)))
-                continue
-
-            # 3.b. Save prediction scores --------------------------------------
-            # max_score_idx = np.argmax(scores)
-            max_score_idxs = np.argsort(scores)[-op_arg.max_true_body:]
-            try:
-                print(f">>>>> {timestamp:10d} : {max_score_idxs} : {scores[max_score_idxs[1]]:.4f} -- {scores[max_score_idxs[0]]:.4f}")   # noqa
-            except IndexError:
-                print(f">>>>> {timestamp:10d} : {max_score_idxs} : {scores[max_score_idxs[0]]:.4f}")   # noqa
-            except Exception as e:
-                print(e)
-
-            skel_data = []
-
-            for max_score_idx in max_score_idxs:
-                if scores[max_score_idx] < op_arg.save_skel_thres:
-                    save_skel3d(empty_skel3d, sp_skeleton, timestamp)
-                    print("Low skeleton score, skip skeleton...")
-                    skel_data.append(empty_skel3d)
-
-                else:
-                    keypoint = pyop.pose_keypoints[max_score_idx]
-                    # ntu_format => x,y(up),z(neg) in meter.
-                    skel3d = get_3d_skeleton(
-                        skeleton=keypoint,
-                        depth_img=depth_image,
-                        intr_mat=rsw.calib_data['color'][0]['intrinsic_mat'],
-                        ntu_format=op_arg.ntu_format
-                    )
-                    save_skel3d(skel3d, sp_skeleton, timestamp)
-                    skel_data.append(skel3d)
-
-            for _ in range(op_arg.max_true_body-len(max_score_idxs)):
-                save_skel3d(empty_skel3d, sp_skeleton, timestamp)
-                skel_data.append(empty_skel3d)
+            # 3. Save data -------------------------------------------------
+            if op_arg.save_skel:
+                intr_mat = calib['color'][0]['intrinsic_mat']
+                skel_save_path = os.path.join(
+                    rsw.storage_paths[dev_sn].skeleton,
+                    f'{timestamp:020d}' + '.txt'
+                )
+                save_skel(pyop, op_arg, depth_image, intr_mat,
+                          empty_skeleton_3d, skel_save_path)
 
             if op_arg.display_skel:
-
+                # state = display_skel(pyop, dev_sn)
                 keypoint_image = pyop.opencv_image
                 keypoint_image = cv2.flip(keypoint_image, 1)
                 cv2.putText(keypoint_image,
-                            "KP (%) : " + str(round(max(scores), 2)),
+                            "KP (%) : " + str(round(max(pyop.pose_scores), 2)),
                             (10, 20),
                             cv2.FONT_HERSHEY_PLAIN,
                             1,
