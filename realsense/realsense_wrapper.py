@@ -4,11 +4,11 @@ import numpy as np
 import os
 import pyrealsense2 as rs
 
-from typing import Optional, Dict, List
+from typing import Optional
 
-from .realsense_device_manager import Device
-from .realsense_device_manager import enumerate_connected_devices
-from .realsense_device_manager import post_process_depth_frame
+from realsense.realsense_device_manager import Device
+from realsense.realsense_device_manager import enumerate_connected_devices
+from realsense.realsense_device_manager import post_process_depth_frame
 
 
 def read_realsense_calibration(file_path: str):
@@ -143,12 +143,13 @@ class RealsenseWrapper:
                 else:
                     sensor.set_option(rs.option.laser_power, power + 10)
 
-    def run(self, display: bool = False) -> dict:
+    def run(self, display: int = 0) -> dict:
         """Gets the frames streamed from the enabled rs devices.
 
         Args:
-            display (bool, optional): Whether to display the retrieved frames.
-                Defaults to False.
+            display (int, optional): Whether to display the retrieved frames.
+                The value corresponds to the scale to visualize the frames.
+                Defaults to 0 = no display.
 
         Returns:
             dict: Empty dict or {serial_number: {data_type: data}}.
@@ -216,8 +217,8 @@ class RealsenseWrapper:
                                         os.path.join(filepath, f'{timestamp}'),
                                         frame_data)
 
-            if display:
-                if self.display_rs_data(frames):
+            if display > 0:
+                if self._display_rs_data(frames, display):
                     return {}
 
             return frames
@@ -230,7 +231,7 @@ class RealsenseWrapper:
             for _, dev in self.enabled_devices.items():
                 dev.pipeline.stop()
 
-    def display_rs_data(self, frames: dict) -> bool:
+    def _display_rs_data(self, frames: dict, scale: int) -> bool:
         terminate = False
         for dev_sn, data_dict in frames.items():
             # Render images
@@ -252,7 +253,8 @@ class RealsenseWrapper:
                 data_dict['color'], 0.3, depth_colormap, 0.5, 0)
             images = np.hstack(
                 (data_dict['color'], depth_colormap, images_overlapped))
-
+            images = cv2.resize(images, (images.shape[1]//scale,
+                                         images.shape[0]//scale))
             cv2.namedWindow(f'{dev_sn}', cv2.WINDOW_AUTOSIZE)
             cv2.imshow(f'{dev_sn}', images)
             key = cv2.waitKey(30)

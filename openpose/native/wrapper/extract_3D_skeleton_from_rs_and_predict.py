@@ -3,12 +3,10 @@ import cv2
 import numpy as np
 import os
 
-from datetime import datetime
-
-from extract_3D_skeleton_from_rs import OpenposeStoragePaths
-from extract_3D_skeleton_from_rs import display_skel
-from extract_3D_skeleton_from_rs import save_skel
-from skeleton import PyOpenPoseNative
+from openpose.native import OpenposeStoragePaths
+from openpose.native import display_skel
+from openpose.native import save_skel
+from openpose.native import PyOpenPoseNative
 from realsense import RealsenseWrapper
 
 from infer.inference import parse_arg

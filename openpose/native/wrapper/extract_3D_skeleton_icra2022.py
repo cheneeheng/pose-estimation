@@ -8,8 +8,8 @@ import sys
 from tqdm import tqdm
 from time import sleep
 
-from .skeleton import PyOpenPoseNative
-from .skeleton import get_3d_skeleton
+from openpose.native import PyOpenPoseNative
+from openpose.native import get_3d_skeleton
 from realsense import read_realsense_calibration
 
 

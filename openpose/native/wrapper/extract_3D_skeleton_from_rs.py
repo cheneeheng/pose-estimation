@@ -5,8 +5,8 @@ import os
 
 from datetime import datetime
 
-from skeleton import get_3d_skeleton
-from skeleton import PyOpenPoseNative
+from openpose.native import get_3d_skeleton
+from openpose.native import PyOpenPoseNative
 from realsense import RealsenseWrapper
 from realsense import StoragePaths
 
@@ -16,11 +16,11 @@ class OpenposeStoragePaths(StoragePaths):
         super().__init__()
         base_path = '/data/openpose'
         date_time = datetime.now().strftime("%y%m%d%H%M%S")
-        self.calib = f'{base_path}/calib/dev{device_sn}_{date_time}'
-        self.color = f'{base_path}/color/dev{device_sn}_{date_time}'
-        self.depth = f'{base_path}/depth/dev{device_sn}_{date_time}'
-        self.skeleton = f'{base_path}/skeleton/dev{device_sn}_{date_time}'
-        self.timestamp = f'{base_path}/timestamp/dev{device_sn}_{date_time}'
+        self.calib = f'{base_path}/calib/{date_time}_dev{device_sn}'
+        self.color = f'{base_path}/color/{date_time}_dev{device_sn}'
+        self.depth = f'{base_path}/depth/{date_time}_dev{device_sn}'
+        self.skeleton = f'{base_path}/skeleton/{date_time}_dev{device_sn}'
+        self.timestamp = f'{base_path}/timestamp/{date_time}_dev{device_sn}'
         self.timestamp_file = os.path.join(self.timestamp, 'timestamp.txt')
         os.makedirs(self.calib, exist_ok=True)
         os.makedirs(self.color, exist_ok=True)
@@ -78,8 +78,11 @@ def save_skel(pyop: PyOpenPoseNative,
                 save_skeleton_3d(empty_skeleton_3d, skeleton_save_path)
 
 
-def display_skel(pyop: PyOpenPoseNative, device_sn: str) -> bool:
+def display_skel(pyop: PyOpenPoseNative, device_sn: str, scale: int) -> bool:
     keypoint_image = pyop.opencv_image
+    keypoint_image = cv2.resize(keypoint_image,
+                                (keypoint_image.shape[1]//scale,
+                                 keypoint_image.shape[0]//scale))
     cv2.putText(keypoint_image,
                 "KP (%) : " + str(round(max(pyop.pose_scores), 2)),
                 (10, 20),
@@ -109,13 +112,13 @@ def get_parser():
                         help='fps')
 
     parser.add_argument('--display-rs',
-                        type=bool,
-                        default=False,
-                        help='if true, display realsense raw images.')
+                        type=int,
+                        default=0,
+                        help='scale for displaying realsense raw images.')
     parser.add_argument('--display-skel',
-                        type=bool,
-                        default=False,
-                        help='if true, display skel images from openpose.')
+                        type=int,
+                        default=0,
+                        help='scale for displaying skel images from openpose.')
 
     parser.add_argument('--save-skel',
                         default=True,
@@ -136,7 +139,7 @@ def get_parser():
     parser.add_argument('--model-pose',
                         type=str,
                         default="BODY_25",
-                        help=' ')
+                        help='pose model name')
     parser.add_argument('--net-resolution',
                         type=str,
                         default="-1x368",
@@ -145,6 +148,17 @@ def get_parser():
                         type=bool,
                         default=False,
                         help='whether to use coordinate system of NTU')
+
+    parser.add_argument('--display-one-rs-only',
+                        type=bool,
+                        default=False,
+                        help='display 1 rs device only.')
+
+    parser.add_argument('--debug',
+                        type=int,
+                        default=0,
+                        help='0: no debug, '
+                             '1: no openpose')
 
     return parser
 
@@ -158,19 +172,25 @@ if __name__ == "__main__":
 
     # 0. Initialize ------------------------------------------------------------
     # OPENPOSE
-    params = dict(
-        model_folder=arg.model_folder,
-        model_pose=arg.model_pose,
-        net_resolution=arg.net_resolution,
-    )
-    pyop = PyOpenPoseNative(params)
-    pyop.initialize()
+    if arg.debug != 1:
+        params = dict(
+            model_folder=arg.model_folder,
+            model_pose=arg.model_pose,
+            net_resolution=arg.net_resolution,
+        )
+        pyop = PyOpenPoseNative(params)
+        pyop.initialize()
 
-    # REALSENSE # STORAGE
+    # REALSENSE
     rsw = RealsenseWrapper()
     rsw.stream_config.fps = 30
+    if arg.display_one_rs_only:
+        rsw.available_devices = rsw.available_devices[0:1]
     rsw.initialize()
+
+    # STORAGE
     rsw.set_storage_paths(OpenposeStoragePaths)
+
     rsw.save_calibration()
 
     try:
@@ -189,20 +209,21 @@ if __name__ == "__main__":
 
                 # 2. Predict pose ----------------------------------------------
                 # bgr format
-                pyop.predict(color_image)
+                if arg.debug != 1:
+                    pyop.predict(color_image)
 
-                # 3. Save data -------------------------------------------------
-                if arg.save_skel:
-                    intr_mat = calib['color'][0]['intrinsic_mat']
-                    skel_save_path = os.path.join(
-                        rsw.storage_paths[dev_sn].skeleton,
-                        f'{timestamp:020d}' + '.txt'
-                    )
-                    save_skel(pyop, arg, depth_image, intr_mat,
-                              empty_skeleton_3d, skel_save_path)
+                    # 3. Save data ---------------------------------------------
+                    if arg.save_skel:
+                        intr_mat = calib['color'][0]['intrinsic_mat']
+                        skel_save_path = os.path.join(
+                            rsw.storage_paths[dev_sn].skeleton,
+                            f'{timestamp:020d}' + '.txt'
+                        )
+                        save_skel(pyop, arg, depth_image, intr_mat,
+                                  empty_skeleton_3d, skel_save_path)
 
-                if arg.display_skel:
-                    state = display_skel(pyop, dev_sn)
+                    if arg.display_skel:
+                        state = display_skel(pyop, dev_sn, arg.display_skel)
 
     except:  # noqa
         print("Stopping realsense...")
