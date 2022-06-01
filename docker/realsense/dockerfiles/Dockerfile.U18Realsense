@@ -58,12 +58,39 @@ RUN cd /usr/src/librealsense \
 ######################################
 FROM ${BASE_IMAGE} as librealsense
 
-# Copy binaries from builder stage
-COPY --from=librealsense-builder /opt/librealsense /usr/local/
-COPY --from=librealsense-builder /usr/lib/python3/dist-packages/pyrealsense2 /usr/lib/python3/dist-packages/pyrealsense2
-COPY --from=librealsense-builder /usr/src/librealsense/config/99-realsense-libusb.rules /etc/udev/rules.d/
-ENV PYTHONPATH=$PYTHONPATH:/usr/local/lib
+ENV LANG en_US.UTF-8
 
+# ------------------------------------------------------------------------------
+# Main apts 
+RUN apt-get update -y
+RUN apt-get install -y sudo nano unzip wget curl git 
+
+ENV TZ=Europe/Berlin
+RUN DEBIAN_FRONTEND="noninteractive" apt-get -y install tzdata
+
+ENV LANG en_US.UTF-8
+
+# ------------------------------------------------------------------------------
+# Main apts 
+RUN apt-get update -y
+RUN apt-get install -y sudo nano unzip wget curl git 
+
+ENV TZ=Europe/Berlin
+RUN DEBIAN_FRONTEND="noninteractive" apt-get -y install tzdata
+
+# ------------------------------------------------------------------------------
+# Python 3.8
+RUN apt-get install -y software-properties-common && \
+    add-apt-repository -y ppa:deadsnakes/ppa && \
+    apt-get update -y && \
+    apt-get install -y python3.8 python3.8-dev python3.8-distutils && \
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 2
+## Keeps Python from generating .pyc files in the container
+ENV PYTHONDONTWRITEBYTECODE=1
+## Turns off buffering for easier container logging
+ENV PYTHONUNBUFFERED=1
+
+# ------------------------------------------------------------------------------
 # Install dep packages
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \	
@@ -75,8 +102,16 @@ RUN apt-get update \
     software-properties-common \
     && rm -rf /var/lib/apt/lists/*
 
-ARG UNAME_ARG
-USER ${UNAME_ARG}
+# ------------------------------------------------------------------------------
+# Copy binaries from builder stage
+COPY --from=librealsense-builder /opt/librealsense /usr/local/
+# COPY --from=librealsense-builder /usr/lib/python3/dist-packages/pyrealsense2 /usr/lib/python3/dist-packages/pyrealsense2
+COPY --from=librealsense-builder /usr/src/librealsense/config/99-realsense-libusb.rules /etc/udev/rules.d/
+ENV PYTHONPATH=$PYTHONPATH:/usr/local/lib
+
+RUN pip install pyrealsense2
+
+WORKDIR /code
 
 # Shows a list of connected Realsense devices
 CMD [ "rs-enumerate-devices", "--compact" ]

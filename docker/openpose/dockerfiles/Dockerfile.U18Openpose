@@ -1,9 +1,6 @@
-FROM nvidia/cuda:11.5.2-cudnn8-devel-ubuntu20.04
+FROM nvidia/cuda:10.2-cudnn7-devel-ubuntu18.04
 
 ENV LANG en_US.UTF-8
-
-ARG UNAME_ARG
-ARG UID_ARG
 
 # ------------------------------------------------------------------------------
 # Main apts 
@@ -15,10 +12,11 @@ RUN DEBIAN_FRONTEND="noninteractive" apt-get -y install tzdata
 
 # ------------------------------------------------------------------------------
 # Python 3.8
-RUN apt-get install -y python3.8 python3.8-dev && \
-    ln -s /usr/bin/python3.8 /usr/bin/python && \
-    ln -s /usr/bin/python3.8 /usr/bin/python3 && \
-    apt-get install -y python3-pip python3-tk
+RUN apt-get install -y software-properties-common && \
+    add-apt-repository -y ppa:deadsnakes/ppa && \
+    apt-get update -y && \
+    apt-get install -y python3.8 python3.8-dev python3.8-distutils && \
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 2
 ## Keeps Python from generating .pyc files in the container
 ENV PYTHONDONTWRITEBYTECODE=1
 ## Turns off buffering for easier container logging
@@ -38,6 +36,7 @@ RUN apt-get install -y \
 # ------------------------------------------------------------------------------
 # pip
 WORKDIR /tmp
+RUN curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py &&  python3 get-pip.py
 COPY ./requirements/requirements_openpose.txt /tmp
 RUN python3 -m pip install -r /tmp/requirements_openpose.txt
 
@@ -45,7 +44,6 @@ RUN python3 -m pip install -r /tmp/requirements_openpose.txt
 # TAKEN FROM : https://github.com/esemeniuc/openpose-docker/blob/master/Dockerfile
 # and : https://hub.docker.com/r/cwaffles/openpose
 
-#replace cmake as old version has CUDA variable bugs
 RUN wget https://github.com/Kitware/CMake/releases/download/v3.21.1/cmake-3.21.1-Linux-x86_64.tar.gz && \
     tar xzf cmake-3.21.1-Linux-x86_64.tar.gz -C /opt && \
     rm cmake-3.21.1-Linux-x86_64.tar.gz
@@ -74,17 +72,5 @@ RUN make install
 RUN cp ./pyopenpose.cpython-38-x86_64-linux-gnu.so /usr/local/lib/python3.8/dist-packages
 RUN ln -s /usr/local/lib/python3.8/dist-packages/pyopenpose.cpython-38-x86_64-linux-gnu.so /usr/local/lib/python3.8/dist-packages/pyopenpose
 ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/src/openpose/build/python/openpose"
-
-# ------------------------------------------------------------------------------
-# pytorch
-RUN pip install torch==1.11.0+cu115 torchvision==0.12.0+cu115 -f https://download.pytorch.org/whl/cu115/torch_stable.html
-
-# ------------------------------------------------------------------------------
-# Creates a non-root user with an explicit UID and adds permission to access the /app folder
-# For more info, please refer to https://aka.ms/vscode-docker-python-configure-containers
-RUN adduser -u ${UID_ARG} --disabled-password --gecos "" ${UNAME_ARG}
-RUN echo "${UNAME_ARG}:${UNAME_ARG}" | chpasswd 
-RUN usermod -aG sudo ${UNAME_ARG}
-USER ${UNAME_ARG}
 
 WORKDIR /code

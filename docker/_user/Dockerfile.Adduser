@@ -1,0 +1,11 @@
+ARG BASE_IMAGE=ubuntu20.04
+FROM ${BASE_IMAGE}
+
+ARG UNAME_ARG
+ARG UID_ARG
+
+# Creates a non-root user with an explicit UID
+RUN adduser -u ${UID_ARG} --disabled-password --gecos "" ${UNAME_ARG}
+RUN echo "${UNAME_ARG}:${UNAME_ARG}" | chpasswd 
+RUN usermod -aG sudo ${UNAME_ARG}
+USER ${UNAME_ARG}
