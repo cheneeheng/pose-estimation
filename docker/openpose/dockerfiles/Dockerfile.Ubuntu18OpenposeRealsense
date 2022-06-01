@@ -56,7 +56,7 @@ RUN cd /usr/src/librealsense \
 ######################################
 #   librealsense Base Image Stage    #
 ######################################
-FROM nvidia/cuda:10.2-cudnn7-devel-ubuntu18.04 AS openpose
+FROM nvidia/cuda:10.2-cudnn7-devel-ubuntu18.04 AS openpose-librealsense
 
 ENV LANG en_US.UTF-8
 

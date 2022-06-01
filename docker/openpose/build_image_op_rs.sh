@@ -21,7 +21,7 @@ else
 
     echo "Building images for librealsense version ${LIBRS_VERSION} with openpose"
     DOCKER_BUILDKIT=1 docker build \
-        --file Dockerfile.OpenposeRealsense \
+        --file dockerfiles/Dockerfile.OpenposeRealsense \
         --target openpose-librealsense \
         --build-arg LIBRS_VERSION=${LIBRS_VERSION} \
         --build-arg UNAME_ARG=$1 \

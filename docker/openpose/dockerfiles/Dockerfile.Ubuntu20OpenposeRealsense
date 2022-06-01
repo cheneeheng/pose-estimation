@@ -56,7 +56,7 @@ RUN cd /usr/src/librealsense \
 ############################################
 #   librealsense + Openpose Image Stage    #
 ############################################
-FROM nvidia/cuda:11.5.2-cudnn8-devel-ubuntu20.04
+FROM nvidia/cuda:11.5.2-cudnn8-devel-ubuntu20.04 AS openpose-librealsense
 
 ENV LANG en_US.UTF-8
 

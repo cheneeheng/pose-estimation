@@ -17,7 +17,7 @@ else
 
     echo "Building image : $3"
     DOCKER_BUILDKIT=1 docker build \
-        --file Dockerfile.Openpose \
+        --file dockerfiles/Dockerfile.Openpose \
         --build-arg UNAME_ARG=$1 \
         --build-arg UID_ARG=$2 \
         --tag ${IMAGE_NAME} \
