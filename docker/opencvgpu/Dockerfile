@@ -55,7 +55,7 @@ RUN ln -s -f ../libv4l1-videodev.h videodev.h
 RUN cd -
 
 # OpenCV optionals
-RUN apt-get install -y \
+RUN DEBIAN_FRONTEND="noninteractive" apt-get install -y \
 	libgtk-3-dev \
 	libtbb-dev \
 	libatlas-base-dev \
