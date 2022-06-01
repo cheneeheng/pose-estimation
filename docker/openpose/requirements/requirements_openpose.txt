@@ -18,4 +18,4 @@ opencv-python
 
 tqdm
 
-pyrealsense2
+# pyrealsense2
