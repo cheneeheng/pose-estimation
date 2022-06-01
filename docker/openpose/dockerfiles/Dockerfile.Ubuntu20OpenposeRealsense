@@ -154,9 +154,11 @@ RUN pip install torch==1.11.0+cu115 torchvision==0.12.0+cu115 -f https://downloa
 # ------------------------------------------------------------------------------
 # Copy binaries from builder stage
 COPY --from=librealsense-builder /opt/librealsense /usr/local/
-COPY --from=librealsense-builder /usr/lib/python3/dist-packages/pyrealsense2 /usr/lib/python3/dist-packages/pyrealsense2
+# COPY --from=librealsense-builder /usr/lib/python3/dist-packages/pyrealsense2 /usr/lib/python3/dist-packages/pyrealsense2
 COPY --from=librealsense-builder /usr/src/librealsense/config/99-realsense-libusb.rules /etc/udev/rules.d/
 ENV PYTHONPATH=$PYTHONPATH:/usr/local/lib
+
+RUN pip install pyrealsense2
 
 # ------------------------------------------------------------------------------
 # Creates a non-root user with an explicit UID and adds permission to access the /app folder
