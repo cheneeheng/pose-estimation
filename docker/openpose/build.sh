@@ -36,7 +36,6 @@ if [ $# -eq 1 ] || [ $# -eq 2 ]; then
             IMAGE_NAME="${2%:*}-${IMAGE_NAME}:${2#*:}"
         fi
 
-        IMAGE_NAME="${2%:*}-${IMAGE_NAME}"
         echo "Building image : ${IMAGE_NAME}"
         DOCKER_BUILDKIT=1 docker build \
             --file ${DOCKER_FILE} \
