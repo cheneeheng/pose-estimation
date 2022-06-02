@@ -3,7 +3,6 @@
 if [ $# -eq 1 ] || [ $# -eq 2 ]; then
 
     if [ "$1" = "ubuntu20" ]; then
-        IMAGE_NAME="opencvgpu:cuda11.5.2-cudnn8-devel-ubuntu20.04"
         DOCKER_FILE="dockerfiles/Dockerfile.U20Opencvgpu"
     else
         echo "Unknown argument, should be {ubuntu20}"
@@ -11,13 +10,24 @@ if [ $# -eq 1 ] || [ $# -eq 2 ]; then
     fi
 
     if [ $# -eq 1 ]; then
+
+        if [ "$1" = "ubuntu20" ]; then
+            IMAGE_NAME="${IMAGE_NAME}:cuda11.5.2-cudnn8-devel-ubuntu20.04"
+        fi
+
         echo "Building image : ${IMAGE_NAME}"
         DOCKER_BUILDKIT=1 docker build \
             --file ${DOCKER_FILE} \
             --tag ${IMAGE_NAME} \
             .
         echo "Built image : ${IMAGE_NAME}\n"
+
     else
+
+        if [ "$1" = "ubuntu20" ]; then
+            IMAGE_NAME="${2%:*}-${IMAGE_NAME}:${2#*:}"
+        fi
+
         IMAGE_NAME="${2%:*}-${IMAGE_NAME}"
         echo "Building image : ${IMAGE_NAME}"
         DOCKER_BUILDKIT=1 docker build \

@@ -14,7 +14,7 @@ cd ../..
 # ADD USER
 cp -rf ../_user tmp
 cd tmp/_user
-sh build.sh ubuntu20 openpose-librealsense:cuda11.5.2-cudnn8-devel-ubuntu20.04-v2.50.0
+sh build.sh dhm 1001 openpose-librealsense:cuda11.5.2-cudnn8-devel-ubuntu20.04-v2.50.0
 cd ../..
 
 rm -rf tmp
