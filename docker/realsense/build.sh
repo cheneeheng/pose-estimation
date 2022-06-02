@@ -1,21 +1,21 @@
 #! /bin/sh
 
 LIBRS_VERSION="2.50.0"
+IMAGE_NAME="librealsense"
 
 if [ $# -eq 1 ] || [ $# -eq 2 ]; then
 
-    if [ "$1" = "ubuntu18" ]; then
-        IMAGE_NAME="librealsense:ubuntu18.04-v${LIBRS_VERSION}"
-        DOCKER_FILE="dockerfiles/Dockerfile.U18Realsense"
-    elif [ "$1" = "ubuntu20" ]; then
-        IMAGE_NAME="librealsense:ubuntu20.04-v${LIBRS_VERSION}"
-        DOCKER_FILE="dockerfiles/Dockerfile.U20Realsense"
-    else
-        echo "Unknown argument, should be {ubuntu18/ubuntu20}"
-        exit 1
-    fi
-
     if [ $# -eq 1 ]; then
+        if [ "$1" = "ubuntu18" ]; then
+            IMAGE_NAME="${IMAGE_NAME}:ubuntu18.04-v${LIBRS_VERSION}"
+            DOCKER_FILE="dockerfiles/Dockerfile.U18Realsense"
+        elif [ "$1" = "ubuntu20" ]; then
+            IMAGE_NAME="${IMAGE_NAME}:ubuntu20.04-v${LIBRS_VERSION}"
+            DOCKER_FILE="dockerfiles/Dockerfile.U20Realsense"
+        else
+            echo "Unknown argument, should be {ubuntu18/ubuntu20}"
+            exit 1
+        fi
         echo "Building image : ${IMAGE_NAME}"
         DOCKER_BUILDKIT=1 docker build \
             --file ${DOCKER_FILE} \
@@ -24,7 +24,19 @@ if [ $# -eq 1 ] || [ $# -eq 2 ]; then
             --tag ${IMAGE_NAME} \
             .
         echo "Built image : ${IMAGE_NAME}\n"
+
     else
+        if [ "$1" = "ubuntu18" ]; then
+            IMAGE_NAME="${2%:*}-${IMAGE_NAME}:${2#*:}-v${LIBRS_VERSION}"
+            DOCKER_FILE="dockerfiles/Dockerfile.U18Realsense"
+        elif [ "$1" = "ubuntu20" ]; then
+            IMAGE_NAME="${2%:*}-${IMAGE_NAME}:${2#*:}-v${LIBRS_VERSION}"
+            DOCKER_FILE="dockerfiles/Dockerfile.U20Realsense"
+        else
+            echo "Unknown argument, should be {ubuntu18/ubuntu20}"
+            exit 1
+        fi
+        IMAGE_NAME="${2%:*}-${IMAGE_NAME}"
         IMAGE_NAME="${2%:*}-${IMAGE_NAME}-v${LIBRS_VERSION}"
         echo "Building image : ${IMAGE_NAME}"
         DOCKER_BUILDKIT=1 docker build \
