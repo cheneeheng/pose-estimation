@@ -15,7 +15,7 @@ RUN DEBIAN_FRONTEND="noninteractive" apt-get -y install tzdata
 RUN apt-get install -y python3.8 python3.8-dev && \
     ln -s /usr/bin/python3.8 /usr/bin/python && \
     ln -s /usr/bin/python3.8 /usr/bin/python3 && \
-    apt-get install -y python3-pip python3-tk
+    apt-get install -y python3-pip python3-tk; exit 0
 ## Keeps Python from generating .pyc files in the container
 ENV PYTHONDONTWRITEBYTECODE=1
 ## Turns off buffering for easier container logging

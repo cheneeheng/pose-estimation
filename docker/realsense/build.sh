@@ -20,6 +20,7 @@ if [ $# -eq 1 ] || [ $# -eq 2 ]; then
         DOCKER_BUILDKIT=1 docker build \
             --file ${DOCKER_FILE} \
             --target librealsense \
+            --build-arg LIBRS_VERSION=${LIBRS_VERSION} \
             --tag ${IMAGE_NAME} \
             .
         echo "Built image : ${IMAGE_NAME}\n"
@@ -30,6 +31,7 @@ if [ $# -eq 1 ] || [ $# -eq 2 ]; then
             --file ${DOCKER_FILE} \
             --target librealsense \
             --build-arg BASE_IMAGE=$2 \
+            --build-arg LIBRS_VERSION=${LIBRS_VERSION} \
             --tag "${IMAGE_NAME}" \
             .
         echo "Built image : ${IMAGE_NAME}\n"
