@@ -36,8 +36,6 @@ if [ $# -eq 1 ] || [ $# -eq 2 ]; then
             echo "Unknown argument, should be {ubuntu18/ubuntu20}"
             exit 1
         fi
-        IMAGE_NAME="${2%:*}-${IMAGE_NAME}"
-        IMAGE_NAME="${2%:*}-${IMAGE_NAME}-v${LIBRS_VERSION}"
         echo "Building image : ${IMAGE_NAME}"
         DOCKER_BUILDKIT=1 docker build \
             --file ${DOCKER_FILE} \
