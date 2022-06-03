@@ -155,6 +155,26 @@ class PyOpenPoseNative:
     def pose_keypoints(self) -> list:
         return self.datum.poseKeypoints
 
+    @property
+    def pose_keypoints_filtered(self) -> list:
+        pose_keypoints_filtered = []
+        scores = self.pose_scores
+        # 3.a. Empty array if scores is None (no skeleton at all)
+        # 3.b. Else pick pose based on prediction scores
+        if scores is None:
+            print("No skeleton detected...")
+            pass
+        else:
+            max_score_idxs = np.argsort(scores)[-self.max_true_body:]
+            for max_score_idx in max_score_idxs:
+                if scores[max_score_idx] < self.skel_thres:
+                    pass
+                    print("Low skeleton score, skip skeleton...")
+                else:
+                    keypoint = self.pose_keypoints[max_score_idx]
+                    pose_keypoints_filtered.append(keypoint)
+        return pose_keypoints_filtered
+
 
 def get_3d_skeleton(skeleton: np.ndarray,
                     depth_img: np.ndarray,

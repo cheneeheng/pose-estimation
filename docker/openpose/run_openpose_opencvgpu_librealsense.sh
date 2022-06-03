@@ -6,7 +6,7 @@ LIBRS_VERSION="2.50.0"
 BASE_IMAGE_TAG="cuda11.5.2-cudnn8-devel-ubuntu20.04"
 TARGET_TAG="openpose-librealsense-opencvgpu-user:${BASE_IMAGE_TAG}-v${LIBRS_VERSION}"
 
-# DATA_PATH="/mnt/DHM-ICU-DS1/data/testing"
+# DATA_PATH="/mnt/DHM-ICUSUITE-DS1/data/testing"
 # DATA_PATH="/home/dhm/workspace/demo_event/data/openpose"
 # CODE_PATH="/home/dhm/workspace/demo_event/code/pose-estimation"
 

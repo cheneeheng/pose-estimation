@@ -6,8 +6,8 @@ import os
 import sys
 sys.path.append(os.getcwd())
 
-from opencv.run_inference_multi import get_body_parts_and_pose_pairs  # noqa
-from opencv.run_inference_multi import PyOpenPose  # noqa
+from openpose.opencv.inference import get_body_parts_and_pose_pairs  # noqa
+from openpose.opencv.inference import PyOpenPose  # noqa
 
 
 # -----------------------------------------------------------------------------

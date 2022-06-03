@@ -1,5 +1,3 @@
-import argparse
-import cv2
 import numpy as np
 import os
 
@@ -50,7 +48,7 @@ if __name__ == "__main__":
     params = dict(
         model_folder=arg_op.op_model_folder,
         model_pose=arg_op.op_model_pose,
-        net_resolution=arg_op.net_resolution,
+        net_resolution=arg_op.op_net_resolution,
         disable_blending=True
     )
     pyop = PyOpenPoseNative(params,
