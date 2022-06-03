@@ -1,4 +1,6 @@
-FROM nvidia/cuda:11.3.0-cudnn8-devel-ubuntu20.04
+ARG BASE_IMAGE=nvidia/cuda:11.5.2-cudnn8-devel-ubuntu20.04
+
+FROM ${BASE_IMAGE}
 
 RUN apt-get update -y
 RUN apt-get install -y sudo nano unzip wget curl git 

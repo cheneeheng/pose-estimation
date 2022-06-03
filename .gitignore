@@ -113,8 +113,8 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-
 .devcontainer/
 .vscode/
 
 openpose/native/wrapper/2s_agcn/
+openpose/output/

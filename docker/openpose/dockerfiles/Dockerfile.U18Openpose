@@ -1,9 +1,14 @@
-FROM nvidia/cuda:10.2-cudnn7-devel-ubuntu18.04
+ARG BASE_IMAGE=nvidia/cuda:10.2-cudnn7-devel-ubuntu18.04
+
+FROM ${BASE_IMAGE}
 
 ENV LANG en_US.UTF-8
 
 # ------------------------------------------------------------------------------
 # Main apts 
+RUN rm /etc/apt/sources.list.d/cuda.list
+RUN rm /etc/apt/sources.list.d/nvidia-ml.list
+
 RUN apt-get update -y
 RUN apt-get install -y sudo nano unzip wget curl git 
 

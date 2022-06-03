@@ -9,7 +9,7 @@ import cv2
 import time
 import numpy as np
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 from openpose.opencv.common import *
 from openpose.opencv.utils import getKeypoints
@@ -139,8 +139,8 @@ class PyOpenPoseOpenCV:
                                                    detected_keypoints,
                                                    self.pose_pairs,
                                                    self.body_parts,
-                                                   self.image_width,
-                                                   self.image_height)
+                                                   self.original_image_width,
+                                                   self.original_image_height)
 
         # get the list of keypoint idx associated to a person.
         # The idx maps to the keypoints_list.
@@ -155,7 +155,7 @@ class PyOpenPoseOpenCV:
 
     def draw_skeleton(self,
                       points: Optional[list] = None,
-                      personwise_keypoints: Optional[list] = None,
+                      personwise_keypoints: Optional[List[np.ndarray]] = None,
                       keypoints_list: Optional[np.ndarray] = None,
                       image: Optional[np.ndarray] = None,
                       show_image: bool = False,

@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-from typing import Tuple
+from typing import Tuple, List
 
 from openpose.opencv.common import MAPIDX
 
@@ -137,7 +137,7 @@ def getPersonwiseKeypoints(valid_pairs: list,
                            invalid_pairs: list,
                            keypoints_list: np.ndarray,
                            body_parts: dict,
-                           pose_pairs: dict) -> list:
+                           pose_pairs: dict) -> List[np.ndarray]:
     # the last number in each row is the overall score
     personwise_keypoints = []
 

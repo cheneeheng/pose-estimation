@@ -1,10 +1,8 @@
 import argparse
-from time import time
 import cv2
-import numpy as np
 import os
 import time
-from datetime import datetime
+from tqdm import trange
 
 from openpose.native import PyOpenPoseNative
 
@@ -54,11 +52,11 @@ def get_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def save_prediction(prediction: list, skeleton_save_path: str) -> None:
-    skeleton_str = ",".join(
-        [str(pos) for skel in prediction for pos in skel])
-    with open(skeleton_save_path, 'a+') as f:
-        f.write(f'{skeleton_str}\n')
+def save_prediction(prediction: list, save_path: str) -> None:
+    for skel in prediction:
+        save_str = ",".join([str(i) for pos in skel for i in pos])
+        with open(save_path, 'a+') as f:
+            f.write(f'{save_str}\n')
 
 
 if __name__ == "__main__":
@@ -69,8 +67,6 @@ if __name__ == "__main__":
     target_path = "openpose/output/inference_native"
     os.makedirs(target_path, exist_ok=True)
 
-    # 0. Initialize ------------------------------------------------------------
-    # OPENPOSE
     params = dict(
         model_folder=arg_op.op_model_folder,
         model_pose=arg_op.op_model_pose,
@@ -83,11 +79,20 @@ if __name__ == "__main__":
                             arg_op.op_ntu_format)
     pyop.initialize()
 
-    for _ in range(100):
+    t_total = 0
+
+    for _ in trange(100):
 
         image = cv2.imread(image_path)
-        image = cv2.resize(image, (848, 480))
+        image = cv2.resize(image, (480, 480))
+
+        t_start = time.time()
+
         pyop.predict(image)
         pred = pyop.pose_keypoints_filtered
 
         save_prediction(pred, f'{target_path}/{int(time.time() * 1e8)}.txt')
+
+        t_total += time.time() - t_start
+
+    print(f"Average inference time over 100 trials : {t_total/100}s")
