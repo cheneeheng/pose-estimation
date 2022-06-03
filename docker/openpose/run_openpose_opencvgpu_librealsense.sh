@@ -3,8 +3,8 @@
 # This script builds docker image of the latest librealsense github tag
 # Get the latest git TAG version
 LIBRS_VERSION="2.50.0"
-OPENPOSE_TAG="cuda10.2-cudnn7-devel-ubuntu18.04"
-TARGET_TAG="openpose-librealsense:${OPENPOSE_TAG}-${LIBRS_VERSION}"
+BASE_IMAGE_TAG="cuda11.5.2-cudnn8-devel-ubuntu20.04"
+TARGET_TAG="openpose-librealsense-opencvgpu-user:${BASE_IMAGE_TAG}-v${LIBRS_VERSION}"
 
 # DATA_PATH="/mnt/DHM-ICU-DS1/data/testing"
 # DATA_PATH="/home/dhm/workspace/demo_event/data/openpose"
