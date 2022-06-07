@@ -2,7 +2,12 @@ import cv2
 import json
 import numpy as np
 import os
-import pyrealsense2 as rs
+
+try:
+    import pyrealsense2 as rs
+except ImportError as e:
+    print('Error: OpenPose library could not be found.')
+    raise e
 
 from typing import Optional, Type
 

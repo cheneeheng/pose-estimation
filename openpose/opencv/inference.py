@@ -59,6 +59,7 @@ if __name__ == "__main__":
     pyop.load(protoFile, weightsFile, False)
 
     t_total = 0
+    N = 1
 
     for _ in trange(100):
 
@@ -85,4 +86,4 @@ if __name__ == "__main__":
 
         t_total += time.time() - t_start
 
-    print(f"Average inference time over 100 trials : {t_total/100}s")
+    print(f"Average inference time over {N} trials : {t_total/100}s")

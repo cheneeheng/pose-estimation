@@ -80,11 +80,12 @@ if __name__ == "__main__":
     pyop.initialize()
 
     t_total = 0
+    N = 1
 
-    for _ in trange(100):
+    for _ in trange(N):
 
         image = cv2.imread(image_path)
-        image = cv2.resize(image, (480, 480))
+        image = cv2.resize(image, (368, 368))
 
         t_start = time.time()
 
@@ -95,4 +96,4 @@ if __name__ == "__main__":
 
         t_total += time.time() - t_start
 
-    print(f"Average inference time over 100 trials : {t_total/100}s")
+    print(f"Average inference time over {N} trials : {t_total/100}s")

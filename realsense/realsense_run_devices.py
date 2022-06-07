@@ -30,6 +30,14 @@ def get_parser():
                         type=int,
                         default=30,
                         help='fps')
+    parser.add_argument('--rs-image-width',
+                        type=int,
+                        default=848,
+                        help='image width in px')
+    parser.add_argument('--rs-image-height',
+                        type=int,
+                        default=480,
+                        help='image height in px')
     parser.add_argument('--rs-laser-power',
                         type=int,
                         default=150,
@@ -54,6 +62,8 @@ def initialize_rs_devices(
 ) -> RealsenseWrapper:
     rsw = RealsenseWrapper(storage_paths if arg.rs_save_data else None)
     rsw.stream_config.fps = arg.rs_fps
+    rsw.stream_config.height = arg.rs_image_height
+    rsw.stream_config.width = arg.rs_image_width
     if arg.rs_use_one_dev_only:
         rsw.available_devices = rsw.available_devices[0:1]
     rsw.initialize()
