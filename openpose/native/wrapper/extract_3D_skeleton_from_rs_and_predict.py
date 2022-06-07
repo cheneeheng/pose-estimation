@@ -4,8 +4,8 @@ import os
 from openpose.native import OpenposeStoragePaths
 from openpose.native import PyOpenPoseNative
 from openpose.native import get_op_parser
-from realsense import get_rs_parser
-from realsense import initialize_rs_devices
+from realsense_python.realsense import get_rs_parser
+from realsense_python.realsense import initialize_rs_devices
 
 from infer.inference import parse_arg
 from infer.inference import get_parser as get_agcn_parser

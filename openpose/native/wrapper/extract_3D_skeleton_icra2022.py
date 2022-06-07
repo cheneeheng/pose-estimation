@@ -10,7 +10,7 @@ from time import sleep
 
 from openpose.native import PyOpenPoseNative
 from openpose.native import get_3d_skeleton
-from realsense import read_realsense_calibration
+from realsense_python.realsense import read_realsense_calibration
 
 
 if __name__ == "__main__":

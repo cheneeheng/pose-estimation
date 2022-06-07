@@ -5,9 +5,9 @@ import os
 from datetime import datetime
 
 from openpose.native import PyOpenPoseNative
-from realsense import StoragePaths
-from realsense import get_rs_parser
-from realsense import initialize_rs_devices
+from realsense_python.realsense import StoragePaths
+from realsense_python.realsense import get_rs_parser
+from realsense_python.realsense import initialize_rs_devices
 
 
 class OpenposeStoragePaths(StoragePaths):
