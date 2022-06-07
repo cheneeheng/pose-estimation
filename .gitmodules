@@ -1,0 +1,3 @@
+[submodule "realsense-wrapper-python"]
+	path = realsense-wrapper-python
+	url = git@github.com:cheneeheng/realsense-wrapper-python.git

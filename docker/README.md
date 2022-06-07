@@ -1,6 +1,7 @@
-openpose:
--> Dockerfile: openpose only + pytorch-1.9.1
-   -> Dockerfile.Realsense: adds realsense
+**[_user](docker/_user)** : add user to a docker image
 
-opencv_gpu:
--> Dockerfile: file to compile opencv with GPU support
+**[movenet](docker/movenet)** : build docker image for movenet
+
+**[opencvgpu](docker/opencvgpu)** : build docker image for opencv with gpu support
+
+**[openpose](docker/openpose)** : build docker image for openpose
