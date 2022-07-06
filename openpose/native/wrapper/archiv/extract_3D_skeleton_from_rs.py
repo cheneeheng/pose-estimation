@@ -145,7 +145,7 @@ if __name__ == "__main__":
                             break
                     elif arg_op.op_display > 0:
                         stop = pyop.display(arg_op.op_display,
-                                            dev_sn, depth_image)
+                                            dev_sn)
                         if stop:
                             break
 
