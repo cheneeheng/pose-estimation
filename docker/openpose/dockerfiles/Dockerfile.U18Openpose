@@ -58,18 +58,19 @@ WORKDIR /usr/local/src/openpose
 RUN git clone https://github.com/CMU-Perceptual-Computing-Lab/openpose.git .
 WORKDIR /usr/local/src/openpose/build
 RUN cmake \
-    -D DOWNLOAD_BODY_25_MODEL=ON \
-    -D DOWNLOAD_BODY_COCO_MODEL=ON \
-    -D DOWNLOAD_BODY_MPI_MODEL=ON \
-    -D DOWNLOAD_FACE_MODEL=OFF \
-    -D DOWNLOAD_HAND_MODEL=OFF \ 
-    -D CUDA_ARCH=Manual \
-    -D CUDA_ARCH_BIN="5.3 6.0 6.1 7.0 7.5" \
-    -D CUDA_ARCH_PTX="7.5" \ 
-    -D BUILD_PYTHON=ON \
-    -D PYTHON_EXECUTABLE="/usr/bin/python3.8" \
-    -D PYTHON_LIBRARY="/usr/lib/x86_64-linux-gnu/libpython3.8m.so" ..
-RUN make -j8
+    -DDOWNLOAD_BODY_25_MODEL=ON \
+    -DDOWNLOAD_BODY_COCO_MODEL=ON \
+    -DDOWNLOAD_BODY_MPI_MODEL=ON \
+    -DDOWNLOAD_FACE_MODEL=OFF \
+    -DDOWNLOAD_HAND_MODEL=OFF \ 
+    -DCUDA_ARCH=Manual \
+    -DCUDA_ARCH_BIN="5.3 6.0 6.1 7.0 7.5" \
+    -DCUDA_ARCH_PTX="7.5" \ 
+    -DUSE_CUDNN=ON \
+    -DBUILD_PYTHON=ON \
+    -DPYTHON_EXECUTABLE="/usr/bin/python3.8" \
+    -DPYTHON_LIBRARY="/usr/lib/x86_64-linux-gnu/libpython3.8m.so" ..
+RUN make -j$(($(nproc) - 1))
 
 WORKDIR /usr/local/src/openpose/build/python/openpose
 RUN make install

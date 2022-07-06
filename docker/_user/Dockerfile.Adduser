@@ -4,6 +4,8 @@ FROM ${BASE_IMAGE}
 ARG UNAME_ARG
 ARG UID_ARG
 
+RUN pip3 install pylint pep8 autopep8 pycodestyle
+
 # Creates a non-root user with an explicit UID
 RUN adduser -u ${UID_ARG} --disabled-password --gecos "" ${UNAME_ARG}
 RUN echo "${UNAME_ARG}:${UNAME_ARG}" | chpasswd 
