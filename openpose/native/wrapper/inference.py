@@ -7,6 +7,15 @@ from tqdm import trange
 from openpose.native import PyOpenPoseNative
 
 
+def str2bool(v) -> bool:
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
 def get_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description='Extract 3D skeleton using OPENPOSE')
@@ -35,10 +44,11 @@ def get_parser() -> argparse.ArgumentParser:
                         default=2,
                         help='offset of patch used to determine depth')
     parser.add_argument('--op-ntu-format',
-                        type=bool,
+                        type=str2bool,
                         default=False,
                         help='whether to use coordinate system of NTU')
     parser.add_argument('--op-save-skel',
+                        type=str2bool,
                         default=True,
                         help='if true, save 3d skeletons.')
     parser.add_argument('--op-display',
@@ -49,6 +59,10 @@ def get_parser() -> argparse.ArgumentParser:
                         type=int,
                         default=0,
                         help='scale for displaying skel images with depth.')
+    parser.add_argument('--op-test-runtime',
+                        type=str2bool,
+                        default=True,
+                        help='if true, test runtime of openpose.')
     return parser
 
 
@@ -59,14 +73,10 @@ def save_prediction(prediction: list, save_path: str) -> None:
             f.write(f'{save_str}\n')
 
 
-if __name__ == "__main__":
-
-    [arg_op, _] = get_parser().parse_known_args()
-
+def test_op_runtime(arg_op: argparse.Namespace):
     image_path = "openpose/pexels-photo-4384679.jpeg"
     target_path = "openpose/output/inference_native"
     os.makedirs(target_path, exist_ok=True)
-
     params = dict(
         model_folder=arg_op.op_model_folder,
         model_pose=arg_op.op_model_pose,
@@ -78,22 +88,21 @@ if __name__ == "__main__":
                             arg_op.op_patch_offset,
                             arg_op.op_ntu_format)
     pyop.initialize()
-
     t_total = 0
-    N = 1
-
+    N = 1000
+    image = cv2.imread(image_path)
+    image = cv2.resize(image, (128, 128))
     for _ in trange(N):
-
-        image = cv2.imread(image_path)
-        image = cv2.resize(image, (368, 368))
-
         t_start = time.time()
-
         pyop.predict(image)
-        pred = pyop.pose_keypoints_filtered
-
-        save_prediction(pred, f'{target_path}/{int(time.time() * 1e8)}.txt')
-
+        # pyop.display(1, 'dummy')
+        # pred = pyop.pose_keypoints_filtered
+        # save_prediction(pred, f'{target_path}/predictions.txt')
         t_total += time.time() - t_start
+    print(f"Average inference time over {N} trials : {t_total/N}s")
 
-    print(f"Average inference time over {N} trials : {t_total/100}s")
+
+if __name__ == "__main__":
+    [arg_op, _] = get_parser().parse_known_args()
+    if arg_op.op_test_runtime:
+        test_op_runtime(arg_op)
