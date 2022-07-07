@@ -86,9 +86,10 @@ def get_parser() -> argparse.ArgumentParser:
 
 
 def save_prediction(prediction: list, save_path: str) -> None:
-    for skel in prediction:
-        save_str = ",".join([str(i) for pos in skel for i in pos])
-        with open(save_path, 'a+') as f:
+    with open(save_path, 'w+') as f:
+        f.write('\n')
+        for skel in prediction:
+            save_str = ",".join([str(i) for pos in skel for i in pos])
             f.write(f'{save_str}\n')
 
 
