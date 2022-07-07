@@ -179,6 +179,7 @@ class PyOpenPoseNative:
 def get_3d_skeleton(skeleton: np.ndarray,
                     depth_img: np.ndarray,
                     intr_mat: Union[list, np.ndarray],
+                    depth_scale: float = 1e-3,
                     patch_offset: int = 2,
                     ntu_format: bool = False):
     if isinstance(intr_mat, list):
@@ -204,7 +205,8 @@ def get_3d_skeleton(skeleton: np.ndarray,
         x3d = (x-cx) / fx * depth_avg
         y3d = (y-cy) / fy * depth_avg
         if ntu_format:
-            joints3d.append([-x3d/1000, -depth_avg/1000, -y3d/1000])
+            joints3d.append([-x3d*depth_scale, -depth_avg*depth_scale,
+                             -y3d*depth_scale])
         else:
             joints3d.append([x3d, y3d, depth_avg])
     return np.array(joints3d)
