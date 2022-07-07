@@ -170,6 +170,12 @@ def rs_offline_inference(args: argparse.Namespace):
     Args:
         args (argparse.Namespace): CLI arguments
     """
+    def _create_save_path(color_dir: str, color_file: str):
+        save_dir = color_dir.replace('color', 'skeleton')
+        save_file = color_file.replace('npy', 'txt')
+        save_path = os.path.join(save_dir, save_file)
+        return save_dir, save_path
+
     assert args.op_rs_offline_inference, f'op_rs_offline_inference is False...'
     assert os.path.isdir(args.op_rs_dir), f'{args.op_rs_dir} does not exist...'
 
@@ -188,35 +194,47 @@ def rs_offline_inference(args: argparse.Namespace):
     base_path = args.op_rs_dir
     dev_trial_color_dir = get_rs_sensor_dir(base_path, 'color')
 
-    for dev, trial_color_dir in dev_trial_color_dir.items():
+    while True:
 
-        for trial, color_dir in trial_color_dir.items():
+        c = 0
+        for dev, trial_color_dir in dev_trial_color_dir.items():
 
-            color_files = os.listdir(color_dir)
+            for trial, color_dir in trial_color_dir.items():
 
-            if len(color_files) == 0:
-                print(f"[INFO] : {color_dir} is empty...")
-                continue
+                color_files = sorted(os.listdir(color_dir))
 
-            print(f"[INFO] : {len(color_files)} files left for inference...")
+                if len(color_files) == 0:
+                    print(f"[INFO] : {color_dir} is empty...")
+                    c += 1
+                    continue
 
-            color_filepath = os.path.join(color_dir, color_files[0])
+                for i, color_file in enumerate(color_files):
+                    color_filepath = os.path.join(color_dir, color_file)
+                    save_dir, save_path = _create_save_path(color_dir,
+                                                            color_file)
+                    if not os.path.exists(save_path):
+                        i = i-1
+                        break
 
-            image = read_color_file(color_filepath)
-            image = image.reshape(args.op_rs_image_height,
-                                  args.op_rs_image_width, 3)
+                if i+1 == len(color_files):
+                    print(f"[INFO] : {color_dir} is fully evaluated...")
+                    c += 1
+                    continue
 
-            pyop.predict(image)
+                print(f"[INFO] : {len(color_files)-i} files left...")
 
-            save_dir = color_dir.replace('color', 'skeleton')
-            os.makedirs(save_dir, exist_ok=True)
-            save_file = color_files[0].replace('npy', 'txt')
-            save_path = os.path.join(save_dir, save_file)
+                image = read_color_file(color_filepath)
+                image = image.reshape(args.op_rs_image_height,
+                                      args.op_rs_image_width, 3)
+                pyop.predict(image)
+                os.makedirs(save_dir, exist_ok=True)
+                save_prediction(prediction=pyop.pose_keypoints_filtered,
+                                save_path=save_path)
 
-            save_prediction(prediction=pyop.pose_keypoints_filtered,
-                            save_path=save_path)
+                print(f"[INFO] : OP output saved in {save_path}")
 
-            print(f"[INFO] : OP output saved in {save_path}")
+        # if c == len(dev_trial_color_dir):
+        #     break
 
 
 if __name__ == "__main__":
