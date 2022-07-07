@@ -172,7 +172,9 @@ class PyOpenPoseNative:
                     print("Low skeleton score, skip skeleton...")
                 else:
                     keypoint = self.pose_keypoints[max_score_idx]
-                    pose_keypoints_filtered.append(keypoint)
+                    pose_keypoints_filtered.append(
+                        (scores[max_score_idx], keypoint)
+                    )
         return pose_keypoints_filtered
 
 
