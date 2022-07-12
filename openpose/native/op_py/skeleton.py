@@ -176,7 +176,7 @@ class PyOpenPoseNative:
                                   cv2.WINDOW_FULLSCREEN)
         cv2.imshow(win_name, image)
         # cv2.moveWindow("depth_keypoint_overlay", 1500, 300)
-        key = cv2.waitKey(0)
+        key = cv2.waitKey(30)
         # Press esc or 'q' to close the image window
         if key & 0xFF == ord('q') or key == 27:
             cv2.destroyAllWindows()
@@ -231,8 +231,8 @@ def save_2d_skeleton(keypoints: Optional[np.ndarray],
         open(save_path, 'a').close()
     else:
         M, _, _ = keypoints.shape
-        data = np.stack([scores.reshape((M, 1)),
-                         keypoints.reshape((M, -1))], axis=1)
+        data = np.concatenate([scores.reshape((M, 1)),
+                               keypoints.reshape((M, -1))], axis=1)
         np.savetxt(save_path, data, delimiter=',')
 
 

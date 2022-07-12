@@ -64,12 +64,16 @@ def get_parser() -> argparse.ArgumentParser:
     # RUN OPTIONS
     parser.add_argument('--op-test-runtime',
                         type=str2bool,
-                        default=True,
+                        default=False,
                         help='if true, test runtime of openpose.')
     parser.add_argument('--op-rs-offline-inference',
                         type=str2bool,
-                        default=True,
+                        default=False,
                         help='if true, run openpose on saved images from rs.')
+    parser.add_argument('--op-rs-delete-image',
+                        type=str2bool,
+                        default=False,
+                        help='if true, deletes the rs image used in inference.')
     parser.add_argument('--op-rs-dir',
                         type=str,
                         default='-1',
@@ -83,16 +87,6 @@ def get_parser() -> argparse.ArgumentParser:
                         default=480,
                         help='image height in px')
     return parser
-
-
-def save_prediction(prediction: list, save_path: str) -> None:
-    with open(save_path, 'w+') as f:
-        f.write('\n')
-        for (score, skel) in prediction:
-            save_str = ",".join(
-                [str(score)] + [str(i) for pos in skel for i in pos]
-            )
-            f.write(f'{save_str}\n')
 
 
 def test_op_runtime(args: argparse.Namespace):
@@ -117,9 +111,9 @@ def test_op_runtime(args: argparse.Namespace):
     for _ in trange(N):
         t_start = time.time()
         pyop.predict(image)
-        pyop.display(1, 'dummy')
-        # pred = pyop.pose_keypoints_filtered
-        # save_prediction(pred, f'{target_path}/predictions.txt')
+        pyop.filter_prediction()
+        # pyop.display(1, 'dummy')
+        pyop.save_pose_keypoints(f'{target_path}/predictions.txt')
         t_total += time.time() - t_start
     print(f"Average inference time over {N} trials : {t_total/N}s")
 
@@ -211,6 +205,7 @@ def rs_offline_inference(args: argparse.Namespace):
                     c += 1
                     continue
 
+                # get the file that has not been inferred on.
                 for i, color_file in enumerate(color_files):
                     color_filepath = os.path.join(color_dir, color_file)
                     save_dir, save_path = _create_save_path(color_dir,
@@ -230,14 +225,14 @@ def rs_offline_inference(args: argparse.Namespace):
                 image = image.reshape(args.op_rs_image_height,
                                       args.op_rs_image_width, 3)
                 pyop.predict(image)
+                pyop.filter_prediction()
                 os.makedirs(save_dir, exist_ok=True)
-                save_prediction(prediction=pyop.pose_keypoints_filtered,
-                                save_path=save_path)
+                pyop.save_pose_keypoints(save_path)
+
+                if args.op_rs_delete_image:
+                    os.remove(color_filepath)
 
                 print(f"[INFO] : OP output saved in {save_path}")
-
-        # if c == len(dev_trial_color_dir):
-        #     break
 
 
 if __name__ == "__main__":
