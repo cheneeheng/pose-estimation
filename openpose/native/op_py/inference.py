@@ -113,11 +113,11 @@ def test_op_runtime(args: argparse.Namespace):
     t_total = 0
     N = 1000
     image = cv2.imread(image_path)
-    image = cv2.resize(image, (128, 128))
+    image = cv2.resize(image, (384, 384))
     for _ in trange(N):
         t_start = time.time()
         pyop.predict(image)
-        # pyop.display(1, 'dummy')
+        pyop.display(1, 'dummy')
         # pred = pyop.pose_keypoints_filtered
         # save_prediction(pred, f'{target_path}/predictions.txt')
         t_total += time.time() - t_start
