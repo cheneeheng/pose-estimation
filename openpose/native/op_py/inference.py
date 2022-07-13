@@ -245,9 +245,8 @@ def rs_offline_inference(args: argparse.Namespace):
                             image = image[:, j:k, :]
                             pyop.predict(image)
                             pyop.filter_prediction()
-                            save_dir = save_dir.replace(
-                                dev_list[0], dev_list[i])
-                            os.makedirs(save_dir, exist_ok=True)
+                            _dir = save_dir.replace(dev_list[0], dev_list[i])
+                            os.makedirs(_dir, exist_ok=True)
                             _path = save_path.split('/')[-1]
                             _path = _path.split('.')[0]
                             _path = _path.split('_')[i]
