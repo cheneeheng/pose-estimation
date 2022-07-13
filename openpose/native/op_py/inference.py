@@ -169,7 +169,7 @@ def rs_offline_inference(args: argparse.Namespace):
     """
     def _create_save_path(color_dir: str, color_file: str):
         save_dir = color_dir.replace('color', 'skeleton')
-        save_file = color_file.replace('npy', 'txt')
+        save_file = color_file.replace('npy', 'csv')
         save_path = os.path.join(save_dir, save_file)
         return save_dir, save_path
 
@@ -190,6 +190,7 @@ def rs_offline_inference(args: argparse.Namespace):
 
     base_path = args.op_rs_dir
     dev_trial_color_dir = get_rs_sensor_dir(base_path, 'color')
+    dev_list = list(dev_trial_color_dir.keys())
 
     while True:
 
@@ -222,12 +223,29 @@ def rs_offline_inference(args: argparse.Namespace):
                 print(f"[INFO] : {len(color_files)-i} files left...")
 
                 image = read_color_file(color_filepath)
-                image = image.reshape(args.op_rs_image_height,
-                                      args.op_rs_image_width, 3)
-                pyop.predict(image)
-                pyop.filter_prediction()
-                os.makedirs(save_dir, exist_ok=True)
-                pyop.save_pose_keypoints(save_path)
+                try:
+                    image = image.reshape(args.op_rs_image_height,
+                                          args.op_rs_image_width, 3)
+                    pyop.predict(image)
+                    pyop.filter_prediction()
+                    os.makedirs(save_dir, exist_ok=True)
+                    pyop.save_pose_keypoints(save_path)
+                except Exception as e:
+                    print(e)
+                    image = image.reshape(args.op_rs_image_height,
+                                          args.op_rs_image_width*3, 3)
+                    for i in range(3):
+                        j = args.op_rs_image_width * i
+                        k = args.op_rs_image_width * (i+1)
+                        image = image[:, j:k, :]
+                        pyop.predict(image)
+                        pyop.filter_prediction()
+                        save_dir = save_dir.replace(dev_list[0], dev_list[i])
+                        os.makedirs(save_dir, exist_ok=True)
+                        _path = save_path.split('/')[-1]
+                        _path = _path.split('.')[0]
+                        _path = _path.split('_')[i]
+                        pyop.save_pose_keypoints(_path)
 
                 if args.op_rs_delete_image:
                     os.remove(color_filepath)
