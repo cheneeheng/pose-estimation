@@ -231,6 +231,7 @@ def rs_offline_inference(args: argparse.Namespace):
                     pyop.filter_prediction()
                     os.makedirs(save_dir, exist_ok=True)
                     pyop.save_pose_keypoints(save_path)
+                    print(f"[INFO] : OP output saved in {save_path}")
 
                 except Exception as e:
                     print(e)
@@ -247,10 +248,12 @@ def rs_offline_inference(args: argparse.Namespace):
                             pyop.filter_prediction()
                             _dir = save_dir.replace(dev_list[0], dev_list[i])
                             os.makedirs(_dir, exist_ok=True)
-                            _path = save_path.split('/')[-1]
+                            _path = _path.replace(dev_list[0], dev_list[i])
+                            _path = _path.split('/')[-1]
                             _path = _path.split('.')[0]
                             _path = _path.split('_')[i]
                             pyop.save_pose_keypoints(_path)
+                            print(f"[INFO] : OP output saved in {save_path}")
 
                     except Exception as e:
                         print(e)
@@ -258,8 +261,6 @@ def rs_offline_inference(args: argparse.Namespace):
 
                 if args.op_rs_delete_image:
                     os.remove(color_filepath)
-
-                print(f"[INFO] : OP output saved in {save_path}")
 
 
 if __name__ == "__main__":
