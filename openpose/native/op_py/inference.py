@@ -222,7 +222,13 @@ def rs_offline_inference(args: argparse.Namespace):
 
                 print(f"[INFO] : {len(color_files)-i} files left...")
 
-                image = read_color_file(color_filepath)
+                try:
+                    image = read_color_file(color_filepath)
+
+                except Exception as e:
+                    print(e)
+                    print("[WARN] : Error in loading data, will retry....")
+                    continue
 
                 try:
                     image = image.reshape(args.op_rs_image_height,
