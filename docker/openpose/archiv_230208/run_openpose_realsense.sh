@@ -1,7 +1,7 @@
 #! /bin/sh
 
-# This script builds docker image of the latest librealsense github tag
-# Get the latest git TAG version
+# THIS SCRIPT REQUIRES 3 ARGS: CMD + host DATA_PATH + host CODE_PATH
+
 LIBRS_VERSION="2.50.0"
 BASE_IMAGE_TAG="cuda11.5.2-cudnn8-devel-ubuntu20.04"
 TARGET_TAG="openpose-librealsense-opencvgpu-user:${BASE_IMAGE_TAG}-v${LIBRS_VERSION}"

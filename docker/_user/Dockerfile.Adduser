@@ -14,4 +14,4 @@ USER ${UNAME_ARG}
 
 WORKDIR /code/pose-estimation
 
-cmd [" bash "]
+CMD [" bash "]

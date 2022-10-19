@@ -1,4 +1,3 @@
-## For more information, please refer to https://aka.ms/vscode-docker-python
 FROM nvidia/cuda:11.3.0-cudnn8-devel-ubuntu20.04
 
 ENV LANG en_US.UTF-8

@@ -50,4 +50,4 @@ else
     echo "1 or 2 arguments are expected : {ubuntu18/ubuntu20}, {BASE_IMAGE}"
     exit 1
 
-fi
+file
