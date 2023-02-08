@@ -1,4 +1,5 @@
 import cv2
+import os
 import numpy as np
 import pyopenpose as op
 
@@ -53,7 +54,7 @@ class PyOpenPoseNative:
 
     @property
     def pose_keypoints(self) -> Optional[np.ndarray]:
-        # [M, V, C]; C = (x,y,score)
+        # [M, V, C]; M = Subjects; V = Joints; C = (x,y,score)
         if self._pose_keypoints is None:
             return self.datum.poseKeypoints
         else:
@@ -84,12 +85,12 @@ class PyOpenPoseNative:
 
     def filter_prediction(self) -> None:
         scores = self.pose_scores
-        # 3.a. Empty array if scores is None (no skeleton at all)
-        # 3.b. Else pick pose based on prediction scores
+        # 1. Empty array if scores is None (no skeleton at all)
         if scores is None:
             print("No skeleton detected...")
             self._pose_keypoints = None
             self._pose_scores = None
+        # 2. Else pick pose based on prediction scores
         else:
             scores_filtered = []
             keypoints_filtered = []
@@ -105,7 +106,7 @@ class PyOpenPoseNative:
                 self._pose_keypoints = None
                 self._pose_scores = None
             else:
-                # [M, V, C]; C = (x,y,score)
+                # [M, V, C]; M = Subjects; V = Joints; C = (x,y,score)
                 self._pose_keypoints = np.stack(keypoints_filtered, axis=0)
                 # [M]
                 self._pose_scores = np.stack(scores_filtered, axis=0)
@@ -242,6 +243,7 @@ def save_2d_skeleton(keypoints: Optional[np.ndarray],
                      save_path: str) -> None:
     # keypoints: [M, V, C]; C = (x,y,score)
     # scores: [M]
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
     if keypoints is None:
         open(save_path, 'a').close()
     else:

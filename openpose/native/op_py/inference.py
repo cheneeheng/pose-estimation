@@ -4,9 +4,15 @@ import numpy as np
 import os
 import time
 from tqdm import trange
-from PIL import Image
+
+from typing import Optional
+
 
 from openpose.native import PyOpenPoseNative
+from openpose.native.op_py.utils import get_rs_sensor_dir
+from openpose.native.op_py.utils import read_calib_file
+from openpose.native.op_py.utils import read_color_file
+from openpose.native.op_py.utils import read_depth_file
 
 
 def str2bool(v) -> bool:
@@ -87,6 +93,10 @@ def get_parser() -> argparse.ArgumentParser:
                         type=int,
                         default=480,
                         help='image height in px')
+    parser.add_argument('--op-rs-3d-skel',
+                        type=str2bool,
+                        default=False,
+                        help='if true, tries to extract 3d skeleton.')  # noqa
     return parser
 
 
@@ -119,51 +129,27 @@ def test_op_runtime(args: argparse.Namespace):
     print(f"Average inference time over {N} trials : {t_total/N}s")
 
 
-# Based on:
-# https://github.com/cheneeheng/realsense-simple-wrapper/blob/main/rs_py/rs_view_raw_data.py
-def get_rs_sensor_dir(base_path: str, sensor: str) -> dict:
-    path = {}
-    for device in sorted(os.listdir(base_path)):
-        path[device] = {}
-        device_path = os.path.join(base_path, device)
-        for ts in sorted(os.listdir(device_path)):
-            path[device][ts] = os.path.join(base_path, device, ts, sensor)
-    return path
-
-
-# From:
-# https://github.com/cheneeheng/realsense-simple-wrapper/blob/main/rs_py/rs_view_raw_data.py
-def _get_brg_from_yuv(data_array: np.ndarray) -> np.ndarray:
-    # Input: Intel handle to 16-bit YU/YV data
-    # Output: BGR8
-    UV = np.uint8(data_array >> 8)
-    Y = np.uint8((data_array << 8) >> 8)
-    YUV = np.zeros((data_array.shape[0], 2), 'uint8')
-    YUV[:, 0] = Y
-    YUV[:, 1] = UV
-    YUV = YUV.reshape(-1, 1, 2)
-    BGR = cv2.cvtColor(YUV, cv2.COLOR_YUV2BGR_YUYV)
-    BGR = BGR.reshape(-1, 3)
-    return BGR
-
-
-# From:
-# https://github.com/cheneeheng/realsense-simple-wrapper/blob/main/rs_py/rs_view_raw_data.py
-def read_color_file(color_file: str) -> np.ndarray:
-    if color_file.endswith(('.png', '.jpeg', '.jpg')):
-        image = np.array(Image.open(color_file))[:, :, ::-1].copy()
-    elif color_file.endswith('.bin'):
-        with open(color_file, 'rb') as f:
-            image = np.fromfile(f, np.uint8)
-    else:
-        image = np.load(color_file)
-        if image.dtype == np.dtype(np.uint8):
-            pass
-        elif image.dtype == np.dtype(np.uint16):
-            image = _get_brg_from_yuv(image.reshape(-1))
-        else:
-            raise ValueError("Unknown data type :", image.dtype)
-    return image
+def _infer_one_image(image: np.ndarray,
+                     pyop: PyOpenPoseNative,
+                     save_path: str,
+                     depth: Optional[np.ndarray] = None
+                     ) -> None:
+    pyop.predict(image)
+    pyop.filter_prediction()
+    # pyop.display(1, 'dummy')
+    pyop.save_pose_keypoints(save_path)
+    print(f"[INFO] : OP output saved in {save_path}")
+    if depth is not None:
+        main_dir = os.path.dirname(os.path.dirname(save_path))
+        intr_mat = read_calib_file(main_dir + "/calib/calib.csv")
+        joints = pyop.pose_keypoints.shape[1]
+        empty_skeleton_3d = np.zeros((joints, 3))
+        pyop.convert_to_3d(
+            intr_mat=intr_mat,
+            depth_image=depth,
+            empty_pose_keypoints_3d=empty_skeleton_3d,
+            save_path=save_path.replace('skeleton', 'skeleton3d')  # noqa
+        )
 
 
 def rs_offline_inference(args: argparse.Namespace):
@@ -172,11 +158,6 @@ def rs_offline_inference(args: argparse.Namespace):
     Args:
         args (argparse.Namespace): CLI arguments
     """
-    def _create_save_path(color_dir: str, color_file: str):
-        save_dir = color_dir.replace('color', 'skeleton')
-        save_file = color_file.replace(color_file.split('.')[-1], 'csv')
-        save_path = os.path.join(save_dir, save_file)
-        return save_dir, save_path
 
     assert args.op_rs_offline_inference, f'op_rs_offline_inference is False...'
     assert os.path.isdir(args.op_rs_dir), f'{args.op_rs_dir} does not exist...'
@@ -197,53 +178,78 @@ def rs_offline_inference(args: argparse.Namespace):
     dev_trial_color_dir = get_rs_sensor_dir(base_path, 'color')
     dev_list = list(dev_trial_color_dir.keys())
 
-    while True:
+    error_counter = 0
+    error_state = False
 
-        c = 0
+    # 1. If no error
+    while not error_state:
+
+        # 2. loop through devices
         for dev, trial_color_dir in dev_trial_color_dir.items():
 
+            # 3. loop through trials
             for trial, color_dir in trial_color_dir.items():
 
                 color_files = sorted(os.listdir(color_dir))
 
                 if len(color_files) == 0:
                     print(f"[INFO] : {color_dir} is empty...")
-                    c += 1
                     continue
 
-                # get the file that has not been inferred on.
+                # 4. get the file that has not been inferred on.
                 for i, color_file in enumerate(color_files):
                     color_filepath = os.path.join(color_dir, color_file)
-                    save_dir, save_path = _create_save_path(color_dir,
-                                                            color_file)
-                    if not os.path.exists(save_path):
-                        i = i-1
+                    skel_file = color_file.replace(color_file.split('.')[-1], 'csv')  # noqa
+                    skel_dir = color_dir.replace('color', 'skeleton')
+                    skel_filepath = os.path.join(skel_dir, skel_file)
+                    if not os.path.exists(skel_filepath):
+                        i = i - 1
                         break
 
-                if i+1 == len(color_files):
+                if i + 1 == len(color_files):
                     print(f"[INFO] : {color_dir} is fully evaluated...")
-                    c += 1
                     continue
 
-                print(f"[INFO] : {len(color_files)-max(i, 0)} files left...")
+                print(f"[INFO] : {len(color_files)-  max(i, 0)} files left...")
 
+                # 5. get the color image
                 try:
                     image = read_color_file(color_filepath)
 
                 except Exception as e:
                     print(e)
-                    print("[WARN] : Error in loading data, will retry....")
-                    continue
+                    print("[WARN] : Error in loading data, will retry...")
+                    error_counter += 1
+                    if error_counter > 300:
+                        print("[ERRO] Retried 300 times and failed...")
+                        error_state = True
+                        break
+                    else:
+                        continue
 
+                # 5b. get the depth image
+                depth = None
+                if args.op_rs_3d_skel:
+
+                    try:
+                        depth = read_depth_file(color_filepath.replace('color', 'depth'))  # noqa
+
+                    except Exception as e:
+                        print(e)
+                        print("[WARN] : Error in loading data, will retry...")
+                        error_counter += 1
+                        if error_counter > 300:
+                            print("[ERRO] Retried 300 times and failed...")
+                            error_state = True
+                            break
+                        else:
+                            continue
+
+                # 6. reshape images
                 try:
                     image = image.reshape(args.op_rs_image_height,
                                           args.op_rs_image_width, 3)
-                    pyop.predict(image)
-                    pyop.filter_prediction()
-                    # pyop.display(1, 'dummy')
-                    os.makedirs(save_dir, exist_ok=True)
-                    pyop.save_pose_keypoints(save_path)
-                    print(f"[INFO] : OP output saved in {save_path}")
+                    data_tuples = [(image, skel_filepath)]
 
                 except Exception as e:
                     print(e)
@@ -252,24 +258,28 @@ def rs_offline_inference(args: argparse.Namespace):
                     try:
                         image = image.reshape(args.op_rs_image_height,
                                               args.op_rs_image_width*3, 3)
-                        for i in range(3):
-                            j = args.op_rs_image_width * i
-                            k = args.op_rs_image_width * (i+1)
-                            image = image[:, j:k, :]
-                            pyop.predict(image)
-                            pyop.filter_prediction()
-                            _dir = save_dir.replace(dev_list[0], dev_list[i])
-                            os.makedirs(_dir, exist_ok=True)
-                            _path = save_path.split('/')[-1]
-                            _path = _path.split('.')[0]
-                            _path = _path.split('_')[i]
-                            _path = os.path.join(_dir, _path + '.csv')
-                            pyop.save_pose_keypoints(_path)
-                            print(f"[INFO] : OP output saved in {_path}")
-
                     except Exception as e:
                         print(e)
                         continue
+
+                    data_tuples = []
+                    for i in range(3):
+                        _dir = skel_dir.replace(dev_list[0], dev_list[i])
+                        _path = skel_file.split('.')[0]
+                        _path = _path.split('_')[i]
+                        _path = os.path.join(_dir, _path + '.csv')
+                        j = args.op_rs_image_width * i
+                        k = args.op_rs_image_width * (i+1)
+                        data_tuples.append((image[:, j:k, :], _path))
+
+                # 7. infer images
+                try:
+                    for image, save_path in data_tuples:
+                        _infer_one_image(image, pyop, save_path, depth)
+
+                except Exception as e:
+                    print(e)
+                    continue
 
                 if args.op_rs_delete_image:
                     os.remove(color_filepath)
