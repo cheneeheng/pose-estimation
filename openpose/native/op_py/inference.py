@@ -4,6 +4,7 @@ import numpy as np
 import os
 import time
 from tqdm import trange
+from PIL import Image
 
 from openpose.native import PyOpenPoseNative
 
@@ -149,7 +150,9 @@ def _get_brg_from_yuv(data_array: np.ndarray) -> np.ndarray:
 # From:
 # https://github.com/cheneeheng/realsense-simple-wrapper/blob/main/rs_py/rs_view_raw_data.py
 def read_color_file(color_file: str) -> np.ndarray:
-    if color_file.endswith('.bin'):
+    if color_file.endswith(('.png', '.jpeg', '.jpg')):
+        image = np.array(Image.open(color_file))[:, :, ::-1].copy()
+    elif color_file.endswith('.bin'):
         with open(color_file, 'rb') as f:
             image = np.fromfile(f, np.uint8)
     else:
@@ -171,7 +174,7 @@ def rs_offline_inference(args: argparse.Namespace):
     """
     def _create_save_path(color_dir: str, color_file: str):
         save_dir = color_dir.replace('color', 'skeleton')
-        save_file = color_file.replace('npy', 'csv')
+        save_file = color_file.replace(color_file.split('.')[-1], 'csv')
         save_path = os.path.join(save_dir, save_file)
         return save_dir, save_path
 
@@ -222,7 +225,7 @@ def rs_offline_inference(args: argparse.Namespace):
                     c += 1
                     continue
 
-                print(f"[INFO] : {len(color_files)-i} files left...")
+                print(f"[INFO] : {len(color_files)-max(i, 0)} files left...")
 
                 try:
                     image = read_color_file(color_filepath)
@@ -237,6 +240,7 @@ def rs_offline_inference(args: argparse.Namespace):
                                           args.op_rs_image_width, 3)
                     pyop.predict(image)
                     pyop.filter_prediction()
+                    # pyop.display(1, 'dummy')
                     os.makedirs(save_dir, exist_ok=True)
                     pyop.save_pose_keypoints(save_path)
                     print(f"[INFO] : OP output saved in {save_path}")
