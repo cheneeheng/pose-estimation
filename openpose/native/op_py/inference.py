@@ -96,7 +96,12 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument('--op-rs-3d-skel',
                         type=str2bool,
                         default=False,
-                        help='if true, tries to extract 3d skeleton.')  # noqa
+                        help='if true, tries to extract 3d skeleton.')
+    parser.add_argument('--op-rs-save-skel-image',
+                        type=str2bool,
+                        # default=False,
+                        default=True,
+                        help='if true, saves the 2d skeleton image.')
     return parser
 
 
@@ -129,29 +134,6 @@ def test_op_runtime(args: argparse.Namespace):
     print(f"Average inference time over {N} trials : {t_total/N}s")
 
 
-def _infer_one_image(image: np.ndarray,
-                     pyop: PyOpenPoseNative,
-                     save_path: str,
-                     depth: Optional[np.ndarray] = None
-                     ) -> None:
-    pyop.predict(image)
-    pyop.filter_prediction()
-    # pyop.display(1, 'dummy')
-    pyop.save_pose_keypoints(save_path)
-    print(f"[INFO] : OP output saved in {save_path}")
-    if depth is not None:
-        main_dir = os.path.dirname(os.path.dirname(save_path))
-        intr_mat = read_calib_file(main_dir + "/calib/calib.csv")
-        joints = pyop.pose_keypoints.shape[1]
-        empty_skeleton_3d = np.zeros((joints, 3))
-        pyop.convert_to_3d(
-            intr_mat=intr_mat,
-            depth_image=depth,
-            empty_pose_keypoints_3d=empty_skeleton_3d,
-            save_path=save_path.replace('skeleton', 'skeleton3d')  # noqa
-        )
-
-
 def rs_offline_inference(args: argparse.Namespace):
     """Runs openpose offline by looking at images found in the image_path arg.
 
@@ -166,6 +148,10 @@ def rs_offline_inference(args: argparse.Namespace):
         model_folder=args.op_model_folder,
         model_pose=args.op_model_pose,
         net_resolution=args.op_net_resolution,
+        # heatmaps_add_parts=True,
+        # heatmaps_add_bkg=True,
+        # heatmaps_add_PAFs=True,
+        # heatmaps_scale=1,
     )
     pyop = PyOpenPoseNative(params,
                             args.op_skel_thres,
@@ -180,9 +166,11 @@ def rs_offline_inference(args: argparse.Namespace):
 
     error_counter = 0
     error_state = False
+    empty_counter = 0
+    empty_state = False
 
     # 1. If no error
-    while not error_state:
+    while not error_state and not empty_state:
 
         # 2. loop through devices
         for dev, trial_color_dir in dev_trial_color_dir.items():
@@ -208,6 +196,10 @@ def rs_offline_inference(args: argparse.Namespace):
 
                 if i + 1 == len(color_files):
                     print(f"[INFO] : {color_dir} is fully evaluated...")
+                    empty_counter += 1
+                    if empty_counter > 300:
+                        print("[INFO] Retried 300 times and no new files...")
+                        empty_state = True
                     continue
 
                 print(f"[INFO] : {len(color_files)-  max(i, 0)} files left...")
@@ -223,9 +215,7 @@ def rs_offline_inference(args: argparse.Namespace):
                     if error_counter > 300:
                         print("[ERRO] Retried 300 times and failed...")
                         error_state = True
-                        break
-                    else:
-                        continue
+                    continue
 
                 # 5b. get the depth image
                 depth = None
@@ -241,9 +231,7 @@ def rs_offline_inference(args: argparse.Namespace):
                         if error_counter > 300:
                             print("[ERRO] Retried 300 times and failed...")
                             error_state = True
-                            break
-                        else:
-                            continue
+                        continue
 
                 # 6. reshape images
                 try:
@@ -254,6 +242,7 @@ def rs_offline_inference(args: argparse.Namespace):
                 except Exception as e:
                     print(e)
                     print("Stacked data detected")
+                    print(f"Current image shape : {image.shape}")
 
                     try:
                         image = image.reshape(args.op_rs_image_height,
@@ -275,7 +264,23 @@ def rs_offline_inference(args: argparse.Namespace):
                 # 7. infer images
                 try:
                     for image, save_path in data_tuples:
-                        _infer_one_image(image, pyop, save_path, depth)
+                        pyop.predict(image)
+                        pyop.filter_prediction()
+                        pyop.save_pose_keypoints(save_path)
+                        if args.op_rs_save_skel_image:
+                            pyop.save_skeleton_image(save_path)
+                        print(f"[INFO] : OP output saved in {save_path}")
+                        if depth is not None:
+                            main_dir = os.path.dirname(os.path.dirname(save_path))  # noqa
+                            intr_mat = read_calib_file(main_dir + "/calib/calib.csv")  # noqa
+                            joints = pyop.pose_keypoints.shape[1]
+                            empty_skeleton_3d = np.zeros((joints, 3))
+                            pyop.convert_to_3d(
+                                intr_mat=intr_mat,
+                                depth_image=depth,
+                                empty_pose_keypoints_3d=empty_skeleton_3d,
+                                save_path=save_path.replace('skeleton', 'skeleton3d')  # noqa
+                            )
 
                 except Exception as e:
                     print(e)
@@ -286,6 +291,7 @@ def rs_offline_inference(args: argparse.Namespace):
 
 
 if __name__ == "__main__":
+
     [arg_op, _] = get_parser().parse_known_args()
     if arg_op.op_test_runtime:
         test_op_runtime(arg_op)

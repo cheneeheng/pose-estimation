@@ -22,6 +22,10 @@ class PyOpenPoseNative:
             params["model_folder"] = "/usr/local/src/openpose/models/"
             params["model_pose"] = "BODY_25"
             params["net_resolution"] = "-1x368"
+            # params["heatmaps_add_parts"] = True
+            # params["heatmaps_add_bkg"] = True
+            # params["heatmaps_add_PAFs"] = True
+            # params["heatmaps_scale"] = 2
 
         self.opWrapper = op.WrapperPython()
         self.opWrapper.configure(params)
@@ -65,23 +69,27 @@ class PyOpenPoseNative:
         # [M, V, C]; C = (x,y,z)
         return self._pose_keypoints_3d
 
-    def reset_poses(self):
+    def reset_poses(self) -> None:
         self._pose_scores = None
         self._pose_keypoints = None
         self._pose_keypoints_3d = None
+        return
 
     def configure(self, params: dict = None) -> None:
         if params is not None:
             self.opWrapper.configure(params)
+        return
 
     def initialize(self) -> None:
         # Starting OpenPose
         self.opWrapper.start()
+        return
 
     def predict(self, image: np.ndarray) -> None:
         self.reset_poses()
         self.datum.cvInputData = image
         self.opWrapper.emplaceAndPop(op.VectorDatum([self.datum]))
+        return
 
     def filter_prediction(self) -> None:
         scores = self.pose_scores
@@ -110,12 +118,13 @@ class PyOpenPoseNative:
                 self._pose_keypoints = np.stack(keypoints_filtered, axis=0)
                 # [M]
                 self._pose_scores = np.stack(scores_filtered, axis=0)
+        return
 
     def convert_to_3d(self,
                       depth_image: np.ndarray,
                       intr_mat: Union[list, np.ndarray],
                       depth_scale: float = 1e-3,
-                      ) -> List[np.ndarray]:
+                      ) -> None:
         if self.pose_keypoints is None:
             print("No skeleton detected...")
         else:
@@ -135,16 +144,19 @@ class PyOpenPoseNative:
                 )
                 pose_keypoints_3d.append(skeleton_3d)
             self._pose_keypoints_3d = np.array(pose_keypoints_3d)
+        return
 
     def save_pose_keypoints(self, save_path: str) -> None:
         save_2d_skeleton(keypoints=self.pose_keypoints,
                          scores=self.pose_scores,
                          save_path=save_path)
+        return
 
     def save_3d_pose_keypoints(self, save_path: str) -> None:
         save_3d_skeleton(keypoints=self.pose_keypoints_3d,
                          scores=self.pose_scores,
                          save_path=save_path)
+        return
 
     def _draw_skeleton_image(self,
                              scale: int,
@@ -200,6 +212,18 @@ class PyOpenPoseNative:
             return True
         else:
             return False
+
+    def save_skeleton_image(self,
+                            save_path: str,
+                            scale: int = 1,
+                            depth: Optional[np.ndarray] = None) -> None:
+        image = self._draw_skeleton_image(scale, depth)
+        image = cv2.flip(image, 1)
+        _path = save_path.replace('skeleton', 'skeleton_color')
+        _path = _path.split('.')[0] + '.jpg'
+        os.makedirs(os.path.dirname(_path), exist_ok=True)
+        cv2.imwrite(_path, image)
+        return
 
 
 def get_3d_skeleton(skeleton: np.ndarray,
