@@ -3,7 +3,7 @@ import os
 import numpy as np
 import pyopenpose as op
 
-from typing import Optional, Union, List
+from typing import Optional, Union, List, Tuple
 
 
 class PyOpenPoseNative:
@@ -35,6 +35,7 @@ class PyOpenPoseNative:
         self._pose_scores = None
         self._pose_keypoints = None
         self._pose_keypoints_3d = None
+        self._pose_bounding_box = None
         self.reset_poses()
 
         # for 3d skel
@@ -69,10 +70,29 @@ class PyOpenPoseNative:
         # [M, V, C]; C = (x,y,z)
         return self._pose_keypoints_3d
 
+    @property
+    def pose_bounding_box(self) -> np.ndarray:
+        if self._pose_bounding_box is None:
+            bb = []
+            for pose_keypoints in self.pose_keypoints:
+                u = pose_keypoints[:, 0]
+                v = pose_keypoints[:, 1]
+                s = pose_keypoints[:, 2]
+                u_min = u[s != 0].min()
+                u_max = u[s != 0].max()
+                v_min = v[s != 0].min()
+                v_max = v[s != 0].max()
+                tl = [int(np.floor(u_min)), int(np.floor(v_min))]
+                br = [int(np.ceil(u_max)), int(np.ceil(v_max))]
+                bb.append(np.array(tl+br))
+            self._pose_bounding_box = np.stack(bb)
+        return self._pose_bounding_box
+
     def reset_poses(self) -> None:
         self._pose_scores = None
         self._pose_keypoints = None
         self._pose_keypoints_3d = None
+        self._pose_bounding_box = None
         return
 
     def configure(self, params: dict = None) -> None:
@@ -105,11 +125,12 @@ class PyOpenPoseNative:
             max_score_idxs = np.argsort(scores)[-self.max_true_body:]
             for max_score_idx in max_score_idxs:
                 if scores[max_score_idx] < self.skel_thres:
-                    print("Low skeleton score, skip skeleton...")
+                    print(f"Low skeleton score {scores[max_score_idx]:.2f}, "
+                          f"skip skeleton...")
                 else:
                     keypoint = self.pose_keypoints[max_score_idx]
                     keypoints_filtered.append(keypoint)
-                    scores_filtered.append(max_score_idx)
+                    scores_filtered.append(scores[max_score_idx])
             if len(scores_filtered) == 0:
                 self._pose_keypoints = None
                 self._pose_scores = None
@@ -118,6 +139,9 @@ class PyOpenPoseNative:
                 self._pose_keypoints = np.stack(keypoints_filtered, axis=0)
                 # [M]
                 self._pose_scores = np.stack(scores_filtered, axis=0)
+
+            print(f"Number of filtered skeletons: {len(keypoints_filtered)}")
+
         return
 
     def convert_to_3d(self,
@@ -159,22 +183,17 @@ class PyOpenPoseNative:
         return
 
     def _draw_skeleton_image(self,
-                             scale: int,
-                             depth_image: Optional[np.ndarray] = None
+                             depth_image: Optional[np.ndarray] = None,
                              ) -> np.ndarray:
         keypoint_image = self.opencv_image
-        keypoint_image = cv2.flip(keypoint_image, 1)
-        if scale < 1000:
-            keypoint_image = cv2.resize(keypoint_image,
-                                        (keypoint_image.shape[1]//scale,
-                                         keypoint_image.shape[0]//scale))
+        # keypoint_image = cv2.flip(keypoint_image, 1)
         cv2.putText(keypoint_image,
-                    "KP (%) : " + str(round(max(self.pose_scores), 2)),
-                    (10, 20),
+                    "KP (%) : " + str(round(np.mean(self.pose_scores), 2)),
+                    (10, 50),
                     cv2.FONT_HERSHEY_PLAIN,
-                    1,
+                    2,
                     (255, 0, 0),
-                    1,
+                    2,
                     cv2.LINE_AA)
         if depth_image is not None:
             colormap = cv2.applyColorMap(
@@ -188,10 +207,31 @@ class PyOpenPoseNative:
         return keypoint_image
 
     def display(self,
-                scale: int,
                 device_sn: str,
-                depth_image: Optional[np.ndarray] = None) -> bool:
-        image = self._draw_skeleton_image(scale, depth_image)
+                scale: float = 1.0,
+                depth_image: Optional[np.ndarray] = None,
+                bounding_box: bool = False,
+                tracks: Optional[list] = None) -> bool:
+        image = self._draw_skeleton_image(depth_image)
+
+        if bounding_box or tracks is not None:
+            for idx, bb in enumerate(self.pose_bounding_box):
+                tl, br = bb[0:2], bb[2:4]
+                image = cv2.rectangle(image, tl, br, (0, 255, 0), 2)
+                if tracks is not None:
+                    tracks[idx]
+                    cv2.putText(image,
+                                f"ID : {tracks[idx]}",
+                                tl,
+                                cv2.FONT_HERSHEY_PLAIN,
+                                2,
+                                (0, 255, 0),
+                                2,
+                                cv2.LINE_AA)
+
+        image = cv2.resize(image, (int(image.shape[1]*scale),
+                                   int(image.shape[0]*scale)))
+
         # overlay = cv2.resize(overlay, (800, 450))
         if depth_image is None:
             win_name = f'keypoint_image_{device_sn}'
@@ -204,7 +244,7 @@ class PyOpenPoseNative:
                                   cv2.WINDOW_FULLSCREEN)
         cv2.imshow(win_name, image)
         # cv2.moveWindow("depth_keypoint_overlay", 1500, 300)
-        key = cv2.waitKey(30)
+        key = cv2.waitKey(300)
         # Press esc or 'q' to close the image window
         if key & 0xFF == ord('q') or key == 27:
             cv2.destroyAllWindows()

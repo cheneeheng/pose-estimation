@@ -69,10 +69,6 @@ def get_parser() -> argparse.ArgumentParser:
                         default=0,
                         help='scale for displaying skel images with depth.')
     # RUN OPTIONS
-    parser.add_argument('--op-test-runtime',
-                        type=str2bool,
-                        default=False,
-                        help='if true, test runtime of openpose.')
     parser.add_argument('--op-rs-offline-inference',
                         type=str2bool,
                         default=False,
@@ -103,35 +99,6 @@ def get_parser() -> argparse.ArgumentParser:
                         default=True,
                         help='if true, saves the 2d skeleton image.')
     return parser
-
-
-def test_op_runtime(args: argparse.Namespace):
-    image_path = "openpose/pexels-photo-4384679.jpeg"
-    target_path = "openpose/output/inference_native"
-    os.makedirs(target_path, exist_ok=True)
-    params = dict(
-        model_folder=args.op_model_folder,
-        model_pose=args.op_model_pose,
-        net_resolution=args.op_net_resolution,
-    )
-    pyop = PyOpenPoseNative(params,
-                            args.op_skel_thres,
-                            args.op_max_true_body,
-                            args.op_patch_offset,
-                            args.op_ntu_format)
-    pyop.initialize()
-    t_total = 0
-    N = 1000
-    image = cv2.imread(image_path)
-    image = cv2.resize(image, (384, 384))
-    for _ in trange(N):
-        t_start = time.time()
-        pyop.predict(image)
-        pyop.filter_prediction()
-        # pyop.display(1, 'dummy')
-        pyop.save_pose_keypoints(f'{target_path}/predictions.txt')
-        t_total += time.time() - t_start
-    print(f"Average inference time over {N} trials : {t_total/N}s")
 
 
 def rs_offline_inference(args: argparse.Namespace):
@@ -293,9 +260,7 @@ def rs_offline_inference(args: argparse.Namespace):
 if __name__ == "__main__":
 
     [arg_op, _] = get_parser().parse_known_args()
-    if arg_op.op_test_runtime:
-        test_op_runtime(arg_op)
-    elif arg_op.op_rs_offline_inference:
+    if arg_op.op_rs_offline_inference:
         rs_offline_inference(arg_op)
 
     print(f"[INFO] : FINISHED")
