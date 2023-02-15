@@ -36,6 +36,7 @@ class PyOpenPoseNative:
         self._pose_keypoints = None
         self._pose_keypoints_3d = None
         self._pose_bounding_box = None
+        self._pose_bounding_box_int = None
         self.reset_poses()
 
         # for 3d skel
@@ -82,11 +83,21 @@ class PyOpenPoseNative:
                 u_max = u[s != 0].max()
                 v_min = v[s != 0].min()
                 v_max = v[s != 0].max()
-                tl = [int(np.floor(u_min)), int(np.floor(v_min))]
-                br = [int(np.ceil(u_max)), int(np.ceil(v_max))]
-                bb.append(np.array(tl+br))
+                bb.append(np.asarray([u_min, v_min, u_max, v_max]))
             self._pose_bounding_box = np.stack(bb)
         return self._pose_bounding_box
+
+    @property
+    def pose_bounding_box_int(self) -> np.ndarray:
+        if self._pose_bounding_box_int is None:
+            _bb = self.pose_bounding_box
+            u_min = np.floor(_bb[:, 0]).astype(int)
+            v_min = np.floor(_bb[:, 1]).astype(int)
+            u_max = np.ceil(_bb[:, 2]).astype(int)
+            v_max = np.ceil(_bb[:, 3]).astype(int)
+            self._pose_bounding_box_int = np.stack(
+                [u_min, v_min, u_max, v_max], axis=1)
+        return self._pose_bounding_box_int
 
     def reset_poses(self) -> None:
         self._pose_scores = None
@@ -215,7 +226,7 @@ class PyOpenPoseNative:
         image = self._draw_skeleton_image(depth_image)
 
         if bounding_box or tracks is not None:
-            for idx, bb in enumerate(self.pose_bounding_box):
+            for idx, bb in enumerate(self.pose_bounding_box_int):
                 tl, br = bb[0:2], bb[2:4]
                 image = cv2.rectangle(image, tl, br, (0, 255, 0), 2)
                 if tracks is not None:

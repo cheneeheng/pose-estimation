@@ -9,10 +9,10 @@ from typing import Optional
 
 
 from openpose.native import PyOpenPoseNative
-from openpose.native.op_py.utils import get_rs_sensor_dir
-from openpose.native.op_py.utils import read_calib_file
-from openpose.native.op_py.utils import read_color_file
-from openpose.native.op_py.utils import read_depth_file
+from openpose.native.op_py.utils_rs import get_rs_sensor_dir
+from openpose.native.op_py.utils_rs import read_calib_file
+from openpose.native.op_py.utils_rs import read_color_file
+from openpose.native.op_py.utils_rs import read_depth_file
 
 
 def str2bool(v) -> bool:
