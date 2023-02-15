@@ -2,3 +2,6 @@
 [submodule "realsense_python"]
 	path = realsense_python
 	url = git@github.com:cheneeheng/realsense-wrapper-python.git
+[submodule "deep_sort"]
+	path = deep_sort
+	url = https://github.com/nwojke/deep_sort.git
