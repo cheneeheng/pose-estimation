@@ -1,4 +1,7 @@
 
+[submodule "deep_sort"]
+	path = deep_sort
+	url = git@github.com:cheneeheng/deep_sort.git
 [submodule "realsense-simple-wrapper"]
 	path = realsense-simple-wrapper
-	url = https://github.com/cheneeheng/realsense-simple-wrapper.git
+	url = git@github.com:cheneeheng/realsense-simple-wrapper.git
