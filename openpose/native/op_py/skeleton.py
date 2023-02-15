@@ -104,6 +104,7 @@ class PyOpenPoseNative:
         self._pose_keypoints = None
         self._pose_keypoints_3d = None
         self._pose_bounding_box = None
+        self._pose_bounding_box_int = None
         return
 
     def configure(self, params: dict = None) -> None:
@@ -225,20 +226,26 @@ class PyOpenPoseNative:
                 tracks: Optional[list] = None) -> bool:
         image = self._draw_skeleton_image(depth_image)
 
-        if bounding_box or tracks is not None:
+        if bounding_box:
             for idx, bb in enumerate(self.pose_bounding_box_int):
                 tl, br = bb[0:2], bb[2:4]
                 image = cv2.rectangle(image, tl, br, (0, 255, 0), 2)
-                if tracks is not None:
-                    tracks[idx]
-                    cv2.putText(image,
-                                f"ID : {tracks[idx]}",
-                                tl,
-                                cv2.FONT_HERSHEY_PLAIN,
-                                2,
-                                (0, 255, 0),
-                                2,
-                                cv2.LINE_AA)
+
+        if tracks is not None:
+            for track in tracks:
+                bb = track.to_tlwh()
+                l, t, w, h = bb
+                tl = (np.floor(l).astype(int), np.floor(t).astype(int))
+                br = (np.ceil(l+w).astype(int), np.ceil(t+h).astype(int))
+                image = cv2.rectangle(image, tl, br, (0, 0, 255), 2)
+                cv2.putText(image,
+                            f"ID : {track.track_id}",
+                            tl,
+                            cv2.FONT_HERSHEY_PLAIN,
+                            2,
+                            (0, 255, 0),
+                            2,
+                            cv2.LINE_AA)
 
         image = cv2.resize(image, (int(image.shape[1]*scale),
                                    int(image.shape[0]*scale)))

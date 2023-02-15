@@ -1,7 +1,7 @@
 import argparse
+import cv2
 import numpy as np
 import os
-
 
 from openpose.native import PyOpenPoseNative
 from openpose.native.op_py.utils import str2bool
@@ -9,6 +9,12 @@ from openpose.native.op_py.utils_rs import get_rs_sensor_dir
 from openpose.native.op_py.utils_rs import read_calib_file
 from openpose.native.op_py.utils_rs import read_color_file
 from openpose.native.op_py.utils_rs import read_depth_file
+from openpose.native.op_py.utils_track import create_detections
+from deep_sort.deep_sort.tracker import Tracker
+from deep_sort.deep_sort.nn_matching import NearestNeighborDistanceMetric
+
+
+# Tracking inspired by : https://github.com/ortegatron/liveposetracker
 
 
 def get_parser() -> argparse.ArgumentParser:
@@ -29,11 +35,11 @@ def get_parser() -> argparse.ArgumentParser:
                         help='resolution of input to openpose.')
     parser.add_argument('--op-skel-thres',
                         type=float,
-                        default=0.5,
+                        default=0.3,
                         help='threshold for valid skeleton.')
     parser.add_argument('--op-max-true-body',
                         type=int,
-                        default=2,
+                        default=12,
                         help='max number of skeletons to save.')
     parser.add_argument('--op-patch-offset',
                         type=int,
@@ -62,24 +68,27 @@ def get_parser() -> argparse.ArgumentParser:
                         help='if true, deletes the rs image used in inference.')
     parser.add_argument('--op-rs-dir',
                         type=str,
-                        default='-1',
+                        default='openpose/data/mot17',
                         help='path to folder with saved rs data.')
     parser.add_argument('--op-rs-image-width',
                         type=int,
-                        default=848,
+                        default=1920,
                         help='image width in px')
     parser.add_argument('--op-rs-image-height',
                         type=int,
-                        default=480,
+                        default=1080,
                         help='image height in px')
     parser.add_argument('--op-rs-3d-skel',
                         type=str2bool,
                         default=False,
                         help='if true, tries to extract 3d skeleton.')
+    # parser.add_argument('--op-rs-save-skel',
+    #                     type=str2bool,
+    #                     default=False,
+    #                     help='if true, saves the 2d skeleton.')
     parser.add_argument('--op-rs-save-skel-image',
                         type=str2bool,
-                        # default=False,
-                        default=True,
+                        default=False,
                         help='if true, saves the 2d skeleton image.')
     return parser
 
@@ -91,16 +100,24 @@ def rs_offline_inference(args: argparse.Namespace):
         args (argparse.Namespace): CLI arguments
     """
 
+    assert args.op_rs_offline_inference, f'op_rs_offline_inference is False...'
     assert os.path.isdir(args.op_rs_dir), f'{args.op_rs_dir} does not exist...'
+
+    max_cosine_distance = 0.3
+    nn_budget = None
+
+    metric = NearestNeighborDistanceMetric(
+        "cosine", max_cosine_distance, nn_budget)
+    tracker = Tracker(metric)
 
     params = dict(
         model_folder=args.op_model_folder,
         model_pose=args.op_model_pose,
         net_resolution=args.op_net_resolution,
-        # heatmaps_add_parts=True,
-        # heatmaps_add_bkg=True,
-        # heatmaps_add_PAFs=True,
-        # heatmaps_scale=1,
+        heatmaps_add_parts=True,
+        heatmaps_add_bkg=True,
+        heatmaps_add_PAFs=True,
+        heatmaps_scale=1,
     )
     pyop = PyOpenPoseNative(params,
                             args.op_skel_thres,
@@ -151,7 +168,8 @@ def rs_offline_inference(args: argparse.Namespace):
                         empty_state = True
                     continue
 
-                print(f"[INFO] : {len(color_files)-  max(i, 0)} files left...")
+                print(
+                    f"[INFO] : {len(color_files)- max(i+1, 0)} files left...")
 
                 # 5. get the color image
                 try:
@@ -213,8 +231,38 @@ def rs_offline_inference(args: argparse.Namespace):
                 # 7. infer images
                 try:
                     for image, save_path in data_tuples:
+
+                        w = args.op_rs_image_width
+                        h = args.op_rs_image_height
                         pyop.predict(image)
                         pyop.filter_prediction()
+
+                        # [op_h, op_w, 76] : all heatmaps
+                        # [M, J, 3] : person, joints, xyz
+                        heatmaps = pyop.datum.poseHeatMaps.copy()
+                        heatmaps = np.moveaxis(heatmaps, 0, -1)
+                        keypoints = pyop.pose_keypoints.copy()
+                        boxes = pyop.pose_bounding_box.copy()
+                        scores = pyop.pose_scores.copy()
+                        s_h = heatmaps.shape[0]/h
+                        s_w = heatmaps.shape[1]/w
+
+                        detections = create_detections(
+                            keypoints, scores, boxes, heatmaps, [s_w, s_h])
+
+                        tracker.predict()
+                        tracker.update(detections)
+
+                        if pyop.datum.poseScores is None:
+                            cv2.imshow(str(dev), image)
+                            cv2.waitKey(300)
+                            continue
+                        else:
+                            pyop.display(str(dev),
+                                         scale=0.5,
+                                         bounding_box=True,
+                                         tracks=tracker.tracks)
+
                         pyop.save_pose_keypoints(save_path)
                         if args.op_rs_save_skel_image:
                             pyop.save_skeleton_image(save_path)

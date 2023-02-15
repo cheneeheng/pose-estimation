@@ -1,4 +1,25 @@
+import argparse
 import numpy as np
+
+
+def str2bool(v: str) -> bool:
+    """Change string to boolean.
+
+    Args:
+        v (str): Boolean or 0/1 in string format.
+
+    Raises:
+        argparse.ArgumentTypeError: Boolean value or 0/1 expected.
+
+    Returns:
+        bool: Either true or false
+    """
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
 
 
 # https://github.com/nwojke/deep_sort/blob/280b8bdb255f223813ff4a8679f3e1321b08cdfc/deep_sort/nn_matching.py#L99
