@@ -152,7 +152,7 @@ class PyOpenPoseNative:
                 # [M]
                 self._pose_scores = np.stack(scores_filtered, axis=0)
 
-            print(f"Number of filtered skeletons: {len(keypoints_filtered)}")
+            # print(f"Number of filtered skeletons: {len(keypoints_filtered)}")
 
         return
 

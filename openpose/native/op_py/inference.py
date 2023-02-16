@@ -4,84 +4,11 @@ import os
 
 
 from openpose.native import PyOpenPoseNative
-from openpose.native.op_py.utils import str2bool
+from openpose.native.op_py.args import get_parser
 from openpose.native.op_py.utils_rs import get_rs_sensor_dir
 from openpose.native.op_py.utils_rs import read_calib_file
 from openpose.native.op_py.utils_rs import read_color_file
 from openpose.native.op_py.utils_rs import read_depth_file
-
-
-def get_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description='Extract 3D skeleton using OPENPOSE')
-    # MAIN
-    parser.add_argument('--op-model-folder',
-                        type=str,
-                        default="/usr/local/src/openpose/models/",
-                        help='folder with trained openpose models.')
-    parser.add_argument('--op-model-pose',
-                        type=str,
-                        default="BODY_25",
-                        help='pose model name')
-    parser.add_argument('--op-net-resolution',
-                        type=str,
-                        default="-1x368",
-                        help='resolution of input to openpose.')
-    parser.add_argument('--op-skel-thres',
-                        type=float,
-                        default=0.5,
-                        help='threshold for valid skeleton.')
-    parser.add_argument('--op-max-true-body',
-                        type=int,
-                        default=2,
-                        help='max number of skeletons to save.')
-    parser.add_argument('--op-patch-offset',
-                        type=int,
-                        default=2,
-                        help='offset of patch used to determine depth')
-    parser.add_argument('--op-ntu-format',
-                        type=str2bool,
-                        default=False,
-                        help='whether to use coordinate system of NTU')
-    parser.add_argument('--op-save-skel',
-                        type=str2bool,
-                        default=True,
-                        help='if true, save 3d skeletons.')
-    parser.add_argument('--op-display',
-                        type=int,
-                        default=0,
-                        help='scale for displaying skel images.')
-    parser.add_argument('--op-display-depth',
-                        type=int,
-                        default=0,
-                        help='scale for displaying skel images with depth.')
-    # RUN OPTIONS
-    parser.add_argument('--op-rs-delete-image',
-                        type=str2bool,
-                        default=False,
-                        help='if true, deletes the rs image used in inference.')
-    parser.add_argument('--op-rs-dir',
-                        type=str,
-                        default='-1',
-                        help='path to folder with saved rs data.')
-    parser.add_argument('--op-rs-image-width',
-                        type=int,
-                        default=848,
-                        help='image width in px')
-    parser.add_argument('--op-rs-image-height',
-                        type=int,
-                        default=480,
-                        help='image height in px')
-    parser.add_argument('--op-rs-3d-skel',
-                        type=str2bool,
-                        default=False,
-                        help='if true, tries to extract 3d skeleton.')
-    parser.add_argument('--op-rs-save-skel-image',
-                        type=str2bool,
-                        # default=False,
-                        default=True,
-                        help='if true, saves the 2d skeleton image.')
-    return parser
 
 
 def rs_offline_inference(args: argparse.Namespace):
@@ -168,7 +95,7 @@ def rs_offline_inference(args: argparse.Namespace):
 
                 # 5b. get the depth image
                 depth = None
-                if args.op_rs_3d_skel:
+                if args.op_rs_extract_3d_skel:
 
                     try:
                         depth = read_depth_file(color_filepath.replace('color', 'depth'))  # noqa
@@ -219,7 +146,7 @@ def rs_offline_inference(args: argparse.Namespace):
                         if args.op_rs_save_skel_image:
                             pyop.save_skeleton_image(save_path)
                         print(f"[INFO] : OP output saved in {save_path}")
-                        if depth is not None:
+                        if args.op_rs_extract_3d_skel:
                             main_dir = os.path.dirname(os.path.dirname(save_path))  # noqa
                             intr_mat = read_calib_file(main_dir + "/calib/calib.csv")  # noqa
                             joints = pyop.pose_keypoints.shape[1]

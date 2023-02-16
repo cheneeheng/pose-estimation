@@ -2,9 +2,11 @@ import argparse
 import cv2
 import numpy as np
 import os
+import time
+from tqdm import trange
 
 from openpose.native import PyOpenPoseNative
-from openpose.native.op_py.utils import str2bool
+from openpose.native.op_py.args import get_parser
 from openpose.native.op_py.utils_rs import get_rs_sensor_dir
 from openpose.native.op_py.utils_rs import read_calib_file
 from openpose.native.op_py.utils_rs import read_color_file
@@ -17,82 +19,6 @@ from deep_sort.deep_sort.nn_matching import NearestNeighborDistanceMetric
 # Tracking inspired by : https://github.com/ortegatron/liveposetracker
 
 
-def get_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description='Extract 3D skeleton using OPENPOSE')
-    # MAIN
-    parser.add_argument('--op-model-folder',
-                        type=str,
-                        default="/usr/local/src/openpose/models/",
-                        help='folder with trained openpose models.')
-    parser.add_argument('--op-model-pose',
-                        type=str,
-                        default="BODY_25",
-                        help='pose model name')
-    parser.add_argument('--op-net-resolution',
-                        type=str,
-                        default="-1x368",
-                        help='resolution of input to openpose.')
-    parser.add_argument('--op-skel-thres',
-                        type=float,
-                        default=0.3,
-                        help='threshold for valid skeleton.')
-    parser.add_argument('--op-max-true-body',
-                        type=int,
-                        default=12,
-                        help='max number of skeletons to save.')
-    parser.add_argument('--op-patch-offset',
-                        type=int,
-                        default=2,
-                        help='offset of patch used to determine depth')
-    parser.add_argument('--op-ntu-format',
-                        type=str2bool,
-                        default=False,
-                        help='whether to use coordinate system of NTU')
-    parser.add_argument('--op-save-skel',
-                        type=str2bool,
-                        default=True,
-                        help='if true, save 3d skeletons.')
-    parser.add_argument('--op-display',
-                        type=int,
-                        default=0,
-                        help='scale for displaying skel images.')
-    parser.add_argument('--op-display-depth',
-                        type=int,
-                        default=0,
-                        help='scale for displaying skel images with depth.')
-    # RUN OPTIONS
-    parser.add_argument('--op-rs-delete-image',
-                        type=str2bool,
-                        default=False,
-                        help='if true, deletes the rs image used in inference.')
-    parser.add_argument('--op-rs-dir',
-                        type=str,
-                        default='openpose/data/mot17',
-                        help='path to folder with saved rs data.')
-    parser.add_argument('--op-rs-image-width',
-                        type=int,
-                        default=1920,
-                        help='image width in px')
-    parser.add_argument('--op-rs-image-height',
-                        type=int,
-                        default=1080,
-                        help='image height in px')
-    parser.add_argument('--op-rs-3d-skel',
-                        type=str2bool,
-                        default=False,
-                        help='if true, tries to extract 3d skeleton.')
-    # parser.add_argument('--op-rs-save-skel',
-    #                     type=str2bool,
-    #                     default=False,
-    #                     help='if true, saves the 2d skeleton.')
-    parser.add_argument('--op-rs-save-skel-image',
-                        type=str2bool,
-                        default=False,
-                        help='if true, saves the 2d skeleton image.')
-    return parser
-
-
 def rs_offline_inference(args: argparse.Namespace):
     """Runs openpose offline by looking at images found in the image_path arg.
 
@@ -100,7 +26,6 @@ def rs_offline_inference(args: argparse.Namespace):
         args (argparse.Namespace): CLI arguments
     """
 
-    assert args.op_rs_offline_inference, f'op_rs_offline_inference is False...'
     assert os.path.isdir(args.op_rs_dir), f'{args.op_rs_dir} does not exist...'
 
     max_cosine_distance = 0.3
@@ -134,6 +59,7 @@ def rs_offline_inference(args: argparse.Namespace):
     error_state = False
     empty_counter = 0
     empty_state = False
+    switch = 0
 
     # 1. If no error
     while not error_state and not empty_state:
@@ -232,8 +158,15 @@ def rs_offline_inference(args: argparse.Namespace):
                 try:
                     for image, save_path in data_tuples:
 
+                        if switch >= 3:
+                            switch = 0
+                            open(save_path, 'a').close()
+                        else:
+                            switch += 1
+
                         w = args.op_rs_image_width
                         h = args.op_rs_image_height
+
                         pyop.predict(image)
                         pyop.filter_prediction()
 
