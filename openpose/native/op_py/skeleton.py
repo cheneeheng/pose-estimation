@@ -179,7 +179,7 @@ class PyOpenPoseNative:
                     ntu_format=self.ntu_format
                 )
                 pose_keypoints_3d.append(skeleton_3d)
-            self._pose_keypoints_3d = np.array(pose_keypoints_3d)
+            self._pose_keypoints_3d = np.asarray(pose_keypoints_3d)
         return
 
     def save_pose_keypoints(self, save_path: str) -> None:
@@ -212,7 +212,7 @@ class PyOpenPoseNative:
                 cv2.convertScaleAbs(depth_image, alpha=0.065, beta=0),
                 cv2.COLORMAP_INFERNO
             )
-            colormap = cv2.flip(colormap, 1)
+            # colormap = cv2.flip(colormap, 1)
             keypoint_image = cv2.addWeighted(
                 keypoint_image, 0.7, colormap, 0.7, 0)
             # overlay = cv2.resize(overlay, (800, 450))
@@ -276,11 +276,11 @@ class PyOpenPoseNative:
                             scale: int = 1,
                             depth: Optional[np.ndarray] = None) -> None:
         image = self._draw_skeleton_image(scale, depth)
-        image = cv2.flip(image, 1)
-        _path = save_path.replace('skeleton', 'skeleton_color')
-        _path = _path.split('.')[0] + '.jpg'
-        os.makedirs(os.path.dirname(_path), exist_ok=True)
-        cv2.imwrite(_path, image)
+        # image = cv2.flip(image, 1)
+        # _path = save_path.replace('skeleton', 'skeleton_color')
+        # _path = _path.split('.')[0] + '.jpg'
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        cv2.imwrite(save_path, image)
         return
 
 

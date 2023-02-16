@@ -26,6 +26,22 @@ def get_parser() -> argparse.ArgumentParser:
                    type=int,
                    default=12,
                    help='max number of skeletons to save.')
+    p.add_argument('--op-heatmaps-add-parts',
+                   type=str2bool,
+                   default=False,
+                   help='')
+    p.add_argument('--op-heatmaps-add-bkg',
+                   type=str2bool,
+                   default=False,
+                   help='')
+    p.add_argument('--op-heatmaps-add-PAFs',
+                   type=str2bool,
+                   default=False,
+                   help='')
+    p.add_argument('--op-heatmaps-scale',
+                   type=int,
+                   default=1,
+                   help='')
 
     # DEPTH OPTIONS ------------------------------------------------------------
     p.add_argument('--op-patch-offset',
@@ -60,6 +76,10 @@ def get_parser() -> argparse.ArgumentParser:
                    type=int,
                    default=1080,
                    help='image height in px')
+    p.add_argument('--op-rs-save-skel',
+                   type=str2bool,
+                   default=True,
+                   help='if true, saves the 2d skeleton.')
     p.add_argument('--op-rs-save-skel-image',
                    type=str2bool,
                    default=False,
@@ -68,6 +88,10 @@ def get_parser() -> argparse.ArgumentParser:
                    type=str2bool,
                    default=False,
                    help='if true, tries to extract 3d skeleton.')
+    p.add_argument('--op-rs-save-3d-skel',
+                   type=str2bool,
+                   default=False,
+                   help='if true, saves the 3d skeleton.')
     p.add_argument('--op-rs-delete-image',
                    type=str2bool,
                    default=False,

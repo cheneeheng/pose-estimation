@@ -4,7 +4,7 @@ import json
 import numpy as np
 import os
 
-from typing import Optional
+from typing import Optional, Tuple
 from PIL import Image
 
 
@@ -62,6 +62,24 @@ def read_color_file(filename: str,
     return image
 
 
+def read_color_file_with_exception(error_state: bool,
+                                   error_counter: int,
+                                   filename: str,
+                                   fileformat: Optional[str] = None
+                                   ) -> Tuple[np.ndarray, bool, int]:
+    try:
+        image = read_color_file(filename, fileformat)
+    except Exception as e:
+        image = None
+        print(e)
+        print("[WARN] : Error in loading data, will retry...")
+        error_counter += 1
+        if error_counter > 300:
+            print("[ERRO] Retried 300 times and failed...")
+            error_state = True
+    return image, error_state, error_counter
+
+
 # From:
 # https://github.com/cheneeheng/realsense-simple-wrapper/blob/main/rs_py/rs_view_raw_data.py
 def read_depth_file(filename: str) -> np.ndarray:
@@ -71,6 +89,22 @@ def read_depth_file(filename: str) -> np.ndarray:
     else:
         depth = np.fromfile(filename, np.uint16)
     return depth
+
+
+def read_depth_file_with_exception(error_state: bool,
+                                   error_counter: int,
+                                   filename: str
+                                   ) -> Tuple[np.ndarray, bool, int]:
+    try:
+        depth = read_depth_file(filename)
+    except Exception as e:
+        print(e)
+        print("[WARN] : Error in loading data, will retry...")
+        error_counter += 1
+        if error_counter > 300:
+            print("[ERRO] Retried 300 times and failed...")
+            error_state = True
+    return depth, error_state, error_counter
 
 
 # From:
@@ -121,3 +155,23 @@ def read_calib_file(calib_file: str) -> dict:
                     calib_data['depth']['depth_baseline'] = float(row[1])
                 line_count += 1
     return calib_data
+
+
+def prepare_save_paths(skel_filepath: str,
+                       save_skel: bool = False,
+                       save_skel_image: bool = False,
+                       save_3d_skel: bool = False):
+    if save_skel:
+        csv_path = skel_filepath
+    else:
+        csv_path = None
+    if save_3d_skel:
+        csv_3d_path = skel_filepath.replace('skeleton', 'skeleton3d')
+    else:
+        csv_3d_path = None
+    if save_skel_image:
+        _path = skel_filepath.replace('skeleton', 'skeleton_color')
+        jpg_path = _path.split('.')[0] + '.jpg'
+    else:
+        jpg_path = None
+    return [csv_path, jpg_path, csv_3d_path]

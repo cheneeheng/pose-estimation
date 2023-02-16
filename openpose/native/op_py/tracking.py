@@ -7,16 +7,50 @@ from tqdm import trange
 
 from openpose.native import PyOpenPoseNative
 from openpose.native.op_py.args import get_parser
+from openpose.native.op_py.utils import Timer
 from openpose.native.op_py.utils_rs import get_rs_sensor_dir
 from openpose.native.op_py.utils_rs import read_calib_file
-from openpose.native.op_py.utils_rs import read_color_file
-from openpose.native.op_py.utils_rs import read_depth_file
+from openpose.native.op_py.utils_rs import read_color_file_with_exception
+from openpose.native.op_py.utils_rs import read_depth_file_with_exception
+from openpose.native.op_py.utils_rs import prepare_save_paths
 from openpose.native.op_py.utils_track import create_detections
 from deep_sort.deep_sort.tracker import Tracker
 from deep_sort.deep_sort.nn_matching import NearestNeighborDistanceMetric
 
+from openpose.native.op_py.inference import Inferencer
+
 
 # Tracking inspired by : https://github.com/ortegatron/liveposetracker
+
+
+class Tracker():
+
+    def __init__(self) -> None:
+        max_cosine_distance = 0.3
+        nn_budget = None
+        metric = NearestNeighborDistanceMetric(
+            "cosine", max_cosine_distance, nn_budget)
+        self.tracker = Tracker(metric)
+
+    def predict(self):
+        self.tracker.predict()
+
+    def update(self, pyop: PyOpenPoseNative, image_size: tuple):
+        detections = self._create_detections(pyop, image_size)
+        self.tracker.update(detections)
+
+    def _create_detections(self, pyop: PyOpenPoseNative, image_size: tuple):
+        # [op_h, op_w, 76] : all heatmaps
+        # [M, J, 3] : person, joints, xyz
+        heatmaps = pyop.datum.poseHeatMaps.copy()
+        heatmaps = np.moveaxis(heatmaps, 0, -1)
+        keypoints = pyop.pose_keypoints.copy()
+        boxes = pyop.pose_bounding_box.copy()
+        scores = pyop.pose_scores.copy()
+        s_h = heatmaps.shape[0]/image_size[1]
+        s_w = heatmaps.shape[1]/image_size[0]
+        return create_detections(
+            keypoints, scores, boxes, heatmaps, [s_w, s_h])
 
 
 def rs_offline_inference(args: argparse.Namespace):
@@ -28,28 +62,15 @@ def rs_offline_inference(args: argparse.Namespace):
 
     assert os.path.isdir(args.op_rs_dir), f'{args.op_rs_dir} does not exist...'
 
-    max_cosine_distance = 0.3
-    nn_budget = None
+    # max_cosine_distance = 0.3
+    # nn_budget = None
 
-    metric = NearestNeighborDistanceMetric(
-        "cosine", max_cosine_distance, nn_budget)
-    tracker = Tracker(metric)
+    # metric = NearestNeighborDistanceMetric(
+    #     "cosine", max_cosine_distance, nn_budget)
+    # tracker = Tracker(metric)
 
-    params = dict(
-        model_folder=args.op_model_folder,
-        model_pose=args.op_model_pose,
-        net_resolution=args.op_net_resolution,
-        heatmaps_add_parts=True,
-        heatmaps_add_bkg=True,
-        heatmaps_add_PAFs=True,
-        heatmaps_scale=1,
-    )
-    pyop = PyOpenPoseNative(params,
-                            args.op_skel_thres,
-                            args.op_max_true_body,
-                            args.op_patch_offset,
-                            args.op_ntu_format)
-    pyop.initialize()
+    OPI = Inferencer(args)
+    TRK = Tracker()
 
     base_path = args.op_rs_dir
     dev_trial_color_dir = get_rs_sensor_dir(base_path, 'color')
@@ -59,7 +80,8 @@ def rs_offline_inference(args: argparse.Namespace):
     error_state = False
     empty_counter = 0
     empty_state = False
-    switch = 0
+    delay_switch = 5
+    delay_counter = 0
 
     # 1. If no error
     while not error_state and not empty_state:
@@ -98,39 +120,32 @@ def rs_offline_inference(args: argparse.Namespace):
                     f"[INFO] : {len(color_files)- max(i+1, 0)} files left...")
 
                 # 5. get the color image
-                try:
-                    image = read_color_file(color_filepath)
-
-                except Exception as e:
-                    print(e)
-                    print("[WARN] : Error in loading data, will retry...")
-                    error_counter += 1
-                    if error_counter > 300:
-                        print("[ERRO] Retried 300 times and failed...")
-                        error_state = True
+                image, error_state, error_counter = \
+                    read_color_file_with_exception(
+                        error_state, error_counter, color_filepath)
+                if image is None:
                     continue
 
                 # 5b. get the depth image
                 depth = None
-                if args.op_rs_3d_skel:
-
-                    try:
-                        depth = read_depth_file(color_filepath.replace('color', 'depth'))  # noqa
-
-                    except Exception as e:
-                        print(e)
-                        print("[WARN] : Error in loading data, will retry...")
-                        error_counter += 1
-                        if error_counter > 300:
-                            print("[ERRO] Retried 300 times and failed...")
-                            error_state = True
+                if args.op_rs_extract_3d_skel:
+                    depth_filepath = color_filepath.replace('color', 'depth')
+                    depth, error_state, error_counter = \
+                        read_depth_file_with_exception(
+                            error_state, error_counter, depth_filepath)
+                    if depth is None:
                         continue
 
                 # 6. reshape images
                 try:
                     image = image.reshape(args.op_rs_image_height,
                                           args.op_rs_image_width, 3)
-                    data_tuples = [(image, skel_filepath)]
+                    save_path_list = prepare_save_paths(
+                        skel_filepath,
+                        args.op_rs_save_skel,
+                        args.op_rs_save_skel_image,
+                        args.op_rs_save_3d_skel)
+                    data_tuples = [[image] + save_path_list]
 
                 except Exception as e:
                     print(e)
@@ -149,68 +164,49 @@ def rs_offline_inference(args: argparse.Namespace):
                         _dir = skel_dir.replace(dev_list[0], dev_list[i])
                         _path = skel_file.split('.')[0]
                         _path = _path.split('_')[i]
-                        _path = os.path.join(_dir, _path + '.csv')
+                        skel_filepath = os.path.join(_dir, _path + '.csv')
+                        save_path_list = prepare_save_paths(
+                            skel_filepath,
+                            args.op_rs_save_skel,
+                            args.op_rs_save_skel_image,
+                            args.op_rs_save_3d_skel)
                         j = args.op_rs_image_width * i
                         k = args.op_rs_image_width * (i+1)
-                        data_tuples.append((image[:, j:k, :], _path))
+                        img = image[:, j:k, :]
+                        data_tuples.append([img] + save_path_list)
 
                 # 7. infer images
                 try:
-                    for image, save_path in data_tuples:
+                    for (image,
+                         kpt_save_path,
+                         skel_image_save_path,
+                         kpt_3d_save_path) in data_tuples:
 
-                        if switch >= 3:
-                            switch = 0
-                            open(save_path, 'a').close()
+                        if delay_counter >= delay_switch:
+                            delay_counter = 0
+                            open(kpt_save_path, 'a').close()
                         else:
-                            switch += 1
+                            delay_counter += 1
 
-                        w = args.op_rs_image_width
-                        h = args.op_rs_image_height
-
-                        pyop.predict(image)
-                        pyop.filter_prediction()
-
-                        # [op_h, op_w, 76] : all heatmaps
-                        # [M, J, 3] : person, joints, xyz
-                        heatmaps = pyop.datum.poseHeatMaps.copy()
-                        heatmaps = np.moveaxis(heatmaps, 0, -1)
-                        keypoints = pyop.pose_keypoints.copy()
-                        boxes = pyop.pose_bounding_box.copy()
-                        scores = pyop.pose_scores.copy()
-                        s_h = heatmaps.shape[0]/h
-                        s_w = heatmaps.shape[1]/w
-
-                        detections = create_detections(
-                            keypoints, scores, boxes, heatmaps, [s_w, s_h])
-
-                        tracker.predict()
-                        tracker.update(detections)
-
-                        if pyop.datum.poseScores is None:
-                            cv2.imshow(str(dev), image)
-                            cv2.waitKey(300)
-                            continue
-                        else:
-                            pyop.display(str(dev),
-                                         scale=0.5,
-                                         bounding_box=True,
-                                         tracks=tracker.tracks)
-
-                        pyop.save_pose_keypoints(save_path)
-                        if args.op_rs_save_skel_image:
-                            pyop.save_skeleton_image(save_path)
-                        print(f"[INFO] : OP output saved in {save_path}")
-                        if depth is not None:
-                            main_dir = os.path.dirname(os.path.dirname(save_path))  # noqa
+                        if args.op_rs_extract_3d_skel:
+                            main_dir = os.path.dirname(os.path.dirname(kpt_save_path))  # noqa
                             intr_mat = read_calib_file(main_dir + "/calib/calib.csv")  # noqa
-                            joints = pyop.pose_keypoints.shape[1]
-                            empty_skeleton_3d = np.zeros((joints, 3))
-                            pyop.convert_to_3d(
-                                intr_mat=intr_mat,
-                                depth_image=depth,
-                                empty_pose_keypoints_3d=empty_skeleton_3d,
-                                save_path=save_path.replace('skeleton', 'skeleton3d')  # noqa
-                            )
+                            OPI.predict_3d(image,
+                                           depth,
+                                           intr_mat,
+                                           kpt_save_path,
+                                           kpt_3d_save_path,
+                                           skel_image_save_path)
+                        else:
+                            OPI.predict(image,
+                                        kpt_save_path,
+                                        skel_image_save_path)
+
+                        TRK.predict()
+                        TRK.update(OPI.pyop, (args.op_rs_image_width,
+                                              args.op_rs_image_height))
+
+                        OPI.display(dev, image, True, TRK.tracker.tracks)
 
                 except Exception as e:
                     print(e)

@@ -1,5 +1,20 @@
 import argparse
+import time
+
 import numpy as np
+
+
+class Timer(object):
+    def __init__(self) -> None:
+        self._t_start = None
+
+    def __enter__(self) -> None:
+        self._t_start = time.time()
+
+    def __exit__(self, *args) -> None:
+        print(f"Finished in : {time.time() - self._t_start} s")
+
+# using with statement with MessageWriter
 
 
 def str2bool(v: str) -> bool:
@@ -23,7 +38,9 @@ def str2bool(v: str) -> bool:
 
 
 # https://github.com/nwojke/deep_sort/blob/280b8bdb255f223813ff4a8679f3e1321b08cdfc/deep_sort/nn_matching.py#L99
-def cosine_distance(a, b, data_is_normalized=False):
+def cosine_distance(a: np.ndarray,
+                    b: np.ndarray,
+                    data_is_normalized: bool = False) -> np.ndarray:
     """Compute pair-wise cosine distance between points in `a` and `b`.
     Parameters
     ----------
@@ -47,7 +64,7 @@ def cosine_distance(a, b, data_is_normalized=False):
 
 
 # https://www.geeksforgeeks.org/image-processing-without-opencv-python/
-def resize_tensor(image, x, y):
+def resize_tensor(image: np.ndarray, x: int, y: int) -> np.ndarray:
     h, w, c = image.shape
     xScale = x/(w-1)
     yScale = y/(h-1)
