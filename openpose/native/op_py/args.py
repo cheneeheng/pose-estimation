@@ -28,15 +28,15 @@ def get_parser() -> argparse.ArgumentParser:
                    help='max number of skeletons to save.')
     p.add_argument('--op-heatmaps-add-parts',
                    type=str2bool,
-                   default=False,
+                   default=True,
                    help='')
     p.add_argument('--op-heatmaps-add-bkg',
                    type=str2bool,
-                   default=False,
+                   default=True,
                    help='')
     p.add_argument('--op-heatmaps-add-PAFs',
                    type=str2bool,
-                   default=False,
+                   default=True,
                    help='')
     p.add_argument('--op-heatmaps-scale',
                    type=int,

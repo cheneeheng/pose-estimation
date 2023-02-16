@@ -14,7 +14,7 @@ from openpose.native.op_py.utils_rs import read_color_file_with_exception
 from openpose.native.op_py.utils_rs import read_depth_file_with_exception
 from openpose.native.op_py.utils_rs import prepare_save_paths
 from openpose.native.op_py.utils_track import create_detections
-from deep_sort.deep_sort.tracker import Tracker
+from deep_sort.deep_sort.tracker import Tracker as DeepSortTracker
 from deep_sort.deep_sort.nn_matching import NearestNeighborDistanceMetric
 
 from openpose.native.op_py.inference import Inferencer
@@ -25,19 +25,20 @@ from openpose.native.op_py.inference import Inferencer
 
 class Tracker():
 
-    def __init__(self) -> None:
+    def __init__(self, max_age=30) -> None:
         max_cosine_distance = 0.3
         nn_budget = None
         metric = NearestNeighborDistanceMetric(
             "cosine", max_cosine_distance, nn_budget)
-        self.tracker = Tracker(metric)
+        self.tracker = DeepSortTracker(metric, max_age=max_age)
+        self.detections = None
 
     def predict(self):
         self.tracker.predict()
 
     def update(self, pyop: PyOpenPoseNative, image_size: tuple):
-        detections = self._create_detections(pyop, image_size)
-        self.tracker.update(detections)
+        self.detections = self._create_detections(pyop, image_size)
+        self.tracker.update(self.detections)
 
     def _create_detections(self, pyop: PyOpenPoseNative, image_size: tuple):
         # [op_h, op_w, 76] : all heatmaps
@@ -62,16 +63,6 @@ def rs_offline_inference(args: argparse.Namespace):
 
     assert os.path.isdir(args.op_rs_dir), f'{args.op_rs_dir} does not exist...'
 
-    # max_cosine_distance = 0.3
-    # nn_budget = None
-
-    # metric = NearestNeighborDistanceMetric(
-    #     "cosine", max_cosine_distance, nn_budget)
-    # tracker = Tracker(metric)
-
-    OPI = Inferencer(args)
-    TRK = Tracker()
-
     base_path = args.op_rs_dir
     dev_trial_color_dir = get_rs_sensor_dir(base_path, 'color')
     dev_list = list(dev_trial_color_dir.keys())
@@ -80,8 +71,11 @@ def rs_offline_inference(args: argparse.Namespace):
     error_state = False
     empty_counter = 0
     empty_state = False
-    delay_switch = 5
+    delay_switch = 3
     delay_counter = 0
+
+    OPI = Inferencer(args)
+    TRK = Tracker(30//delay_switch)
 
     # 1. If no error
     while not error_state and not empty_state:
@@ -182,11 +176,25 @@ def rs_offline_inference(args: argparse.Namespace):
                          skel_image_save_path,
                          kpt_3d_save_path) in data_tuples:
 
-                        if delay_counter >= delay_switch:
-                            delay_counter = 0
+                        if delay_counter > 1:
+                            delay_counter -= 1
                             open(kpt_save_path, 'a').close()
+                            for tracks in TRK.tracker.tracks:
+                                tracks.mean, tracks.covariance = \
+                                    TRK.tracker.kf.predict(
+                                        tracks.mean,
+                                        tracks.covariance,
+                                    )
+                                tracks.mean, tracks.covariance = \
+                                    TRK.tracker.kf.update(
+                                        tracks.mean,
+                                        tracks.covariance,
+                                        tracks.mean[:4]
+                                    )
+                            OPI.display(dev, image, True, TRK.tracker.tracks)
+                            continue
                         else:
-                            delay_counter += 1
+                            delay_counter = delay_switch
 
                         if args.op_rs_extract_3d_skel:
                             main_dir = os.path.dirname(os.path.dirname(kpt_save_path))  # noqa

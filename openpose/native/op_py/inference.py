@@ -67,7 +67,7 @@ class Inferencer(object):
     def display(self, dev="1", image=None, bounding_box=False, tracks=None):
         if self.pyop.datum.poseScores is None:
             cv2.imshow(str(dev), image)
-            cv2.waitKey(300)
+            cv2.waitKey(1000)
         else:
             self.pyop.display(str(dev),
                               scale=0.5,

@@ -37,7 +37,7 @@ class PyOpenPoseNative:
         self._pose_keypoints_3d = None
         self._pose_bounding_box = None
         self._pose_bounding_box_int = None
-        self.reset_poses()
+        self.reset()
 
         # for 3d skel
         self.skel_thres = skel_thres
@@ -99,7 +99,7 @@ class PyOpenPoseNative:
                 [u_min, v_min, u_max, v_max], axis=1)
         return self._pose_bounding_box_int
 
-    def reset_poses(self) -> None:
+    def reset(self) -> None:
         self._pose_scores = None
         self._pose_keypoints = None
         self._pose_keypoints_3d = None
@@ -118,7 +118,7 @@ class PyOpenPoseNative:
         return
 
     def predict(self, image: np.ndarray) -> None:
-        self.reset_poses()
+        self.reset()
         self.datum.cvInputData = image
         self.opWrapper.emplaceAndPop(op.VectorDatum([self.datum]))
         return
@@ -233,10 +233,10 @@ class PyOpenPoseNative:
 
         if tracks is not None:
             for track in tracks:
-                bb = track.to_tlwh()
-                l, t, w, h = bb
+                bb = track.to_tlbr()
+                l, t, r, b = bb
                 tl = (np.floor(l).astype(int), np.floor(t).astype(int))
-                br = (np.ceil(l+w).astype(int), np.ceil(t+h).astype(int))
+                br = (np.ceil(r).astype(int), np.ceil(b).astype(int))
                 image = cv2.rectangle(image, tl, br, (0, 0, 255), 2)
                 cv2.putText(image,
                             f"ID : {track.track_id}",
@@ -262,7 +262,7 @@ class PyOpenPoseNative:
                                   cv2.WINDOW_FULLSCREEN)
         cv2.imshow(win_name, image)
         # cv2.moveWindow("depth_keypoint_overlay", 1500, 300)
-        key = cv2.waitKey(300)
+        key = cv2.waitKey(1000)
         # Press esc or 'q' to close the image window
         if key & 0xFF == ord('q') or key == 27:
             cv2.destroyAllWindows()
