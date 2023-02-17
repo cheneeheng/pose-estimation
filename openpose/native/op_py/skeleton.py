@@ -33,6 +33,7 @@ class PyOpenPoseNative:
 
         # results
         self._pose_scores = None
+        self._pose_heatmaps = None
         self._pose_keypoints = None
         self._pose_keypoints_3d = None
         self._pose_bounding_box = None
@@ -57,6 +58,15 @@ class PyOpenPoseNative:
             return self.datum.poseScores
         else:
             return self._pose_scores
+
+    @property
+    def pose_heatmaps(self) -> Optional[np.ndarray]:
+        # [op_h, op_w, 76] : all heatmaps
+        # [M, J, 3] : person, joints, xyz
+        if self._pose_heatmaps is None:
+            return np.moveaxis(self.datum.poseHeatMaps, 0, -1)
+        else:
+            return self._pose_heatmaps
 
     @property
     def pose_keypoints(self) -> Optional[np.ndarray]:
@@ -101,6 +111,7 @@ class PyOpenPoseNative:
 
     def reset(self) -> None:
         self._pose_scores = None
+        self._pose_heatmaps = None
         self._pose_keypoints = None
         self._pose_keypoints_3d = None
         self._pose_bounding_box = None
@@ -128,8 +139,7 @@ class PyOpenPoseNative:
         # 1. Empty array if scores is None (no skeleton at all)
         if scores is None:
             print("No skeleton detected...")
-            self._pose_keypoints = None
-            self._pose_scores = None
+            self.reset()
         # 2. Else pick pose based on prediction scores
         else:
             scores_filtered = []
@@ -137,22 +147,22 @@ class PyOpenPoseNative:
             max_score_idxs = np.argsort(scores)[-self.max_true_body:]
             for max_score_idx in max_score_idxs:
                 if scores[max_score_idx] < self.skel_thres:
-                    print(f"Low skeleton score {scores[max_score_idx]:.2f}, "
-                          f"skip skeleton...")
+                    # print(f"Low skeleton score {scores[max_score_idx]:.2f}, "
+                    #       f"skip skeleton...")
+                    continue
                 else:
                     keypoint = self.pose_keypoints[max_score_idx]
                     keypoints_filtered.append(keypoint)
                     scores_filtered.append(scores[max_score_idx])
             if len(scores_filtered) == 0:
-                self._pose_keypoints = None
-                self._pose_scores = None
+                self.reset()
             else:
                 # [M, V, C]; M = Subjects; V = Joints; C = (x,y,score)
                 self._pose_keypoints = np.stack(keypoints_filtered, axis=0)
                 # [M]
                 self._pose_scores = np.stack(scores_filtered, axis=0)
 
-            # print(f"Number of filtered skeletons: {len(keypoints_filtered)}")
+            print(f"Skeletons filtered: {len(keypoints_filtered)}/{len(max_score_idxs)}")  # noqa
 
         return
 
@@ -163,6 +173,7 @@ class PyOpenPoseNative:
                       ) -> None:
         if self.pose_keypoints is None:
             print("No skeleton detected...")
+            pass
         else:
             pose_keypoints_3d = []
             # 3.a. Empty array if scores is None (no skeleton at all)

@@ -24,7 +24,7 @@ def get_parser() -> argparse.ArgumentParser:
                    help='threshold for valid skeleton.')
     p.add_argument('--op-max-true-body',
                    type=int,
-                   default=12,
+                   default=8,
                    help='max number of skeletons to save.')
     p.add_argument('--op-heatmaps-add-parts',
                    type=str2bool,
@@ -78,7 +78,7 @@ def get_parser() -> argparse.ArgumentParser:
                    help='image height in px')
     p.add_argument('--op-rs-save-skel',
                    type=str2bool,
-                   default=True,
+                   default=False,
                    help='if true, saves the 2d skeleton.')
     p.add_argument('--op-rs-save-skel-image',
                    type=str2bool,
@@ -96,4 +96,11 @@ def get_parser() -> argparse.ArgumentParser:
                    type=str2bool,
                    default=False,
                    help='if true, deletes the rs image used in inference.')
+
+    # TRACKING OPTIONS ---------------------------------------------------------
+    p.add_argument('--op-track',
+                   type=str2bool,
+                   default=True,
+                   help='If true performs deepsort tracking.')
+
     return p

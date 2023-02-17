@@ -5,14 +5,16 @@ import numpy as np
 
 
 class Timer(object):
-    def __init__(self) -> None:
+    def __init__(self, text: str = '') -> None:
         self._t_start = None
+        self._text = text
 
     def __enter__(self) -> None:
         self._t_start = time.time()
 
     def __exit__(self, *args) -> None:
-        print(f"Finished in : {time.time() - self._t_start} s")
+        _duration = time.time() - self._t_start
+        print(f"Finished {self._text} in : {_duration:.6f} s")
 
 # using with statement with MessageWriter
 
