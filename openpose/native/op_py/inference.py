@@ -5,6 +5,8 @@ import numpy as np
 
 from typing import Optional
 
+from ByteTrack.yolox.tracker.byte_tracker import BYTETracker
+
 from openpose.native import PyOpenPoseNative
 from openpose.native.op_py.args import get_parser
 from openpose.native.op_py.utils import Timer
@@ -89,20 +91,44 @@ class PoseExtractor(object):
 # Tracking inspired by : https://github.com/ortegatron/liveposetracker
 class Tracker():
 
-    def __init__(self, max_age=30) -> None:
-        max_cosine_distance = 0.2
-        nn_budget = None
-        metric = NearestNeighborDistanceMetric(
-            "cosine", max_cosine_distance, nn_budget)
-        self.tracker = DeepSortTracker(metric, max_age=max_age)
+    def __init__(self,
+                 max_age: int = 30,
+                 byte_args: Optional[argparse.ArgumentParser] = None) -> None:
+        """Intializes the tracker class.
+
+        Args:
+            max_age (int, optional): How long an untracked obj stays alive.
+                Same as buffer_size in byte tracker. Defaults to 30.
+        """
+        if byte_args is not None:
+            self.tracker = BYTETracker(byte_args)
+            self.name = 'byte_tracker'
+        else:
+            max_cosine_distance = 0.2
+            nn_budget = None
+            metric = NearestNeighborDistanceMetric(
+                "cosine", max_cosine_distance, nn_budget)
+            self.tracker = DeepSortTracker(metric, max_age=max_age)
+            self.name = 'deep_sort'
         self.detections = None
 
     def predict(self):
+        if self.name == 'byte_tracker':
+            raise ValueError("Not used...")
         self.tracker.predict()
 
     def update(self, pyop: PyOpenPoseNative, image_size: tuple):
-        self.detections = self._create_detections(pyop, image_size)
-        self.tracker.update(self.detections)
+        if self.name == 'deep_sort':
+            self.detections = self._create_detections(pyop, image_size)
+            self.tracker.update(self.detections)
+        elif self.name == 'byte_tracker':
+            boxes = pyop.pose_bounding_box.copy()
+            scores = pyop.pose_scores.copy()
+            detections = np.concatenate(
+                [boxes, scores.reshape([len(scores), 1])], axis=1)
+            self.tracker.update(detections)
+        else:
+            raise ValueError("Not implemented...")
 
     def _create_detections(self, pyop: PyOpenPoseNative, image_size: tuple):
         heatmaps = pyop.pose_heatmaps.copy()
@@ -129,6 +155,19 @@ class Tracker():
                 )
 
 
+def make_parser():
+    parser = argparse.ArgumentParser("ByteTrack Args!")
+    parser.add_argument("--track_thresh", type=float,
+                        default=0.5, help="tracking confidence threshold")
+    parser.add_argument("--track_buffer", type=int, default=30,
+                        help="the frames for keep lost tracks")
+    parser.add_argument("--match_thresh", type=float,
+                        default=0.8, help="matching threshold for tracking")
+    parser.add_argument("--mot20", dest="mot20", default=False,
+                        action="store_true", help="test mot20.")
+    return parser
+
+
 def rs_offline_inference(args: argparse.Namespace):
     """Runs openpose offline by looking at images found in the image_path arg.
 
@@ -146,13 +185,15 @@ def rs_offline_inference(args: argparse.Namespace):
     error_state = False
     empty_counter = 0
     empty_state = False
-    delay_switch = 3
+    delay_switch = 1
     delay_counter = 0
 
     c = 30
 
+    byte_args = None  # make_parser()
+
     PE = PoseExtractor(args)
-    TK = Tracker(30//delay_switch) if args.op_track else None
+    TK = Tracker(30//delay_switch, byte_args) if args.op_track else None
 
     # 1. If no error
     while not error_state and not empty_state:
@@ -291,11 +332,16 @@ def rs_offline_inference(args: argparse.Namespace):
                                            skel_image_save_path)
 
                         if TK is not None:
-                            with Timer("predict"):
-                                TK.predict()
-                            with Timer("update"):
-                                TK.update(PE.pyop, (args.op_rs_image_width,
-                                                    args.op_rs_image_height))
+                            if TK.name == 'byte_tracker':
+                                with Timer("update"):
+                                    TK.update(PE.pyop)
+                            else:
+                                with Timer("predict"):
+                                    TK.predict()
+                                with Timer("update"):
+                                    TK.update(PE.pyop,
+                                              (args.op_rs_image_width,
+                                               args.op_rs_image_height))
 
                         PE.display(dev, 3000, image, True, TK.tracker.tracks)
                         print(f"Number of tracks : {len(TK.tracker.tracks)}")

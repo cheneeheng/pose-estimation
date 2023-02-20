@@ -19,3 +19,8 @@ opencv-python
 tqdm
 
 # pyrealsense2
+
+scipy
+lap
+
+cython
