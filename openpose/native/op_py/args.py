@@ -20,7 +20,7 @@ def get_parser() -> argparse.ArgumentParser:
                    help='resolution of input to openpose.')
     p.add_argument('--op-skel-thres',
                    type=float,
-                   default=0.3,
+                   default=0.5,
                    help='threshold for valid skeleton.')
     p.add_argument('--op-max-true-body',
                    type=int,

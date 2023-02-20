@@ -231,6 +231,7 @@ class PyOpenPoseNative:
 
     def display(self,
                 device_sn: str,
+                speed: int = 1000,
                 scale: float = 1.0,
                 depth_image: Optional[np.ndarray] = None,
                 bounding_box: bool = False,
@@ -273,7 +274,7 @@ class PyOpenPoseNative:
                                   cv2.WINDOW_FULLSCREEN)
         cv2.imshow(win_name, image)
         # cv2.moveWindow("depth_keypoint_overlay", 1500, 300)
-        key = cv2.waitKey(1000)
+        key = cv2.waitKey(speed)
         # Press esc or 'q' to close the image window
         if key & 0xFF == ord('q') or key == 27:
             cv2.destroyAllWindows()

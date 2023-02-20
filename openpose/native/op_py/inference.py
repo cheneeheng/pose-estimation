@@ -68,13 +68,20 @@ class PoseExtractor(object):
         if kpt_3d_save_path is not None:
             self.pyop.save_3d_pose_keypoints(kpt_3d_save_path)
 
-    def display(self, dev="1", image=None, bounding_box=False, tracks=None):
+    def display(self,
+                dev: str = "1",
+                speed: int = 1000,
+                image: Optional[np.ndarray] = None,
+                bounding_box: bool = False,
+                tracks=None):
         if self.pyop.datum.poseScores is None:
             cv2.imshow(str(dev), image)
-            cv2.waitKey(1000)
+            cv2.waitKey(speed)
         else:
+            cv2.imshow(str(dev)+"_ori", image)
             self.pyop.display(str(dev),
-                              scale=0.5,
+                              scale=1.0,
+                              speed=speed,
                               bounding_box=bounding_box,
                               tracks=tracks)
 
@@ -83,7 +90,7 @@ class PoseExtractor(object):
 class Tracker():
 
     def __init__(self, max_age=30) -> None:
-        max_cosine_distance = 0.3
+        max_cosine_distance = 0.2
         nn_budget = None
         metric = NearestNeighborDistanceMetric(
             "cosine", max_cosine_distance, nn_budget)
@@ -107,6 +114,20 @@ class Tracker():
         return create_detections(
             keypoints, scores, boxes, heatmaps, [s_w, s_h])
 
+    def no_measurement_predict_and_update(self):
+        for tracks in self.tracker.tracks:
+            tracks.mean, tracks.covariance = \
+                self.tracker.kf.predict(
+                    tracks.mean,
+                    tracks.covariance,
+                )
+            tracks.mean, tracks.covariance = \
+                self.tracker.kf.update(
+                    tracks.mean,
+                    tracks.covariance,
+                    tracks.mean[:4]
+                )
+
 
 def rs_offline_inference(args: argparse.Namespace):
     """Runs openpose offline by looking at images found in the image_path arg.
@@ -125,10 +146,10 @@ def rs_offline_inference(args: argparse.Namespace):
     error_state = False
     empty_counter = 0
     empty_state = False
-    delay_switch = 1
+    delay_switch = 3
     delay_counter = 0
 
-    c = 0
+    c = 30
 
     PE = PoseExtractor(args)
     TK = Tracker(30//delay_switch) if args.op_track else None
@@ -235,36 +256,26 @@ def rs_offline_inference(args: argparse.Namespace):
                             img = image[:, j:k, :]
                             data_tuples.append([img] + save_path_list)
 
-                with Timer("infer"):
-                    # 7. infer images
-                    try:
-                        for (image,
-                             kpt_save_path,
-                             skel_image_save_path,
-                             kpt_3d_save_path) in data_tuples:
+                # 7. infer images
+                try:
+                    for (image,
+                         kpt_save_path,
+                         skel_image_save_path,
+                         kpt_3d_save_path) in data_tuples:
 
-                            if TK is not None:
-                                if delay_counter > 1:
-                                    delay_counter -= 1
+                        if TK is not None:
+                            if delay_counter > 1:
+                                delay_counter -= 1
+                                if kpt_save_path is not None:
                                     open(kpt_save_path, 'a').close()
-                                    for tracks in TK.tracker.tracks:
-                                        tracks.mean, tracks.covariance = \
-                                            TK.tracker.kf.predict(
-                                                tracks.mean,
-                                                tracks.covariance,
-                                            )
-                                        tracks.mean, tracks.covariance = \
-                                            TK.tracker.kf.update(
-                                                tracks.mean,
-                                                tracks.covariance,
-                                                tracks.mean[:4]
-                                            )
-                                    PE.display(dev, image, True,
-                                               TK.tracker.tracks)
-                                    continue
-                                else:
-                                    delay_counter = delay_switch
+                                TK.no_measurement_predict_and_update()
+                                PE.display(dev, 1, image, True,
+                                           TK.tracker.tracks)
+                                continue
+                            else:
+                                delay_counter = delay_switch
 
+                        with Timer("infer"):
                             if args.op_rs_extract_3d_skel:
                                 main_dir = os.path.dirname(os.path.dirname(kpt_save_path))  # noqa
                                 intr_mat = read_calib_file(main_dir + "/calib/calib.csv")  # noqa
@@ -279,16 +290,19 @@ def rs_offline_inference(args: argparse.Namespace):
                                            kpt_save_path,
                                            skel_image_save_path)
 
-                            if TK is not None:
+                        if TK is not None:
+                            with Timer("predict"):
                                 TK.predict()
+                            with Timer("update"):
                                 TK.update(PE.pyop, (args.op_rs_image_width,
                                                     args.op_rs_image_height))
 
-                            # PE.display(dev, image, True, TK.tracker.tracks)
+                        PE.display(dev, 3000, image, True, TK.tracker.tracks)
+                        print(f"Number of tracks : {len(TK.tracker.tracks)}")
 
-                    except Exception as e:
-                        print(e)
-                        continue
+                except Exception as e:
+                    print(e)
+                    continue
 
                 if args.op_rs_delete_image:
                     os.remove(color_filepath)
