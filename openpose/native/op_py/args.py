@@ -1,5 +1,5 @@
 import argparse
-from openpose.native.op_py.utils import str2bool
+from .utils import str2bool
 
 
 def get_parser() -> argparse.ArgumentParser:
@@ -92,15 +92,26 @@ def get_parser() -> argparse.ArgumentParser:
                    type=str2bool,
                    default=False,
                    help='if true, saves the 3d skeleton.')
+    p.add_argument('--op-rs-save-heatmaps',
+                   type=str2bool,
+                   default=False,
+                   help='if true, saves the heatmaps/output of network.')
     p.add_argument('--op-rs-delete-image',
                    type=str2bool,
                    default=False,
                    help='if true, deletes the rs image used in inference.')
 
     # TRACKING OPTIONS ---------------------------------------------------------
-    p.add_argument('--op-track',
+    p.add_argument('--op-track-deepsort',
                    type=str2bool,
                    default=True,
                    help='If true performs deepsort tracking.')
-
+    p.add_argument('--op-track-bytetrack',
+                   type=str2bool,
+                   default=False,
+                   help='If true performs ByteTrack tracking.')
+    p.add_argument('--op-track-buffer',
+                   type=int,
+                   default=30,
+                   help="the frames for keep lost tracks.")
     return p

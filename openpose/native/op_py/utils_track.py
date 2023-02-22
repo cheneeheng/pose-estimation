@@ -2,7 +2,7 @@ import numpy as np
 
 from typing import Optional, Tuple
 
-from openpose.native.op_py.utils import resize_tensor
+from .utils import resize_tensor
 from deep_sort.deep_sort.detection import Detection
 
 

@@ -3,7 +3,7 @@ import os
 import time
 from tqdm import trange
 
-from openpose.native import PyOpenPoseNative
+from .skeleton import PyOpenPoseNative
 
 
 def test_op_runtime():

@@ -1,3 +1,4 @@
+import argparse
 import cv2
 import os
 import numpy as np
@@ -6,7 +7,67 @@ import pyopenpose as op
 from typing import Optional, Union, List, Tuple
 
 
+def get_3d_skeleton(skeleton: np.ndarray,
+                    depth_img: np.ndarray,
+                    intr_mat: Union[list, np.ndarray],
+                    depth_scale: float = 1e-3,
+                    patch_offset: int = 2,
+                    ntu_format: bool = False) -> np.ndarray:
+    if isinstance(intr_mat, list):
+        fx = intr_mat[0]
+        fy = intr_mat[4]
+        cx = intr_mat[2]
+        cy = intr_mat[5]
+    elif isinstance(intr_mat, np.ndarray):
+        fx = intr_mat[0, 0]
+        fy = intr_mat[1, 1]
+        cx = intr_mat[0, 2]
+        cy = intr_mat[1, 2]
+    else:
+        raise ValueError("Unknown intr_mat format.")
+    H, W = depth_img.shape
+    joints3d = []
+    for x, y, _ in skeleton:
+        patch = depth_img[
+            max(0, int(y-patch_offset)):min(H, int(y+patch_offset)),  # noqa
+            max(0, int(x-patch_offset)):min(W, int(x+patch_offset))  # noqa
+        ]
+        depth_avg = np.mean(patch)
+        x3d = (x-cx) / fx * depth_avg
+        y3d = (y-cy) / fy * depth_avg
+        if ntu_format:
+            joints3d.append([-x3d*depth_scale, -depth_avg*depth_scale,
+                             -y3d*depth_scale])
+        else:
+            joints3d.append([x3d, y3d, depth_avg])
+    return np.array(joints3d)
+
+
+def save_2d_skeleton(keypoints: Optional[np.ndarray],
+                     scores: Optional[np.ndarray],
+                     save_path: str) -> None:
+    # keypoints: [M, V, C]; C = (x,y,score)
+    # scores: [M]
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    if keypoints is None:
+        open(save_path, 'a').close()
+    else:
+        M, _, _ = keypoints.shape
+        data = np.concatenate([scores.reshape((M, 1)),
+                               keypoints.reshape((M, -1))], axis=1)
+        np.savetxt(save_path, data, delimiter=',')
+
+
+def save_3d_skeleton(keypoints: Optional[np.ndarray],
+                     scores: Optional[np.ndarray],
+                     save_path: str) -> None:
+    # keypoints: [M, V, C]; C = (x,y,z)
+    # scores: [M]
+    return save_2d_skeleton(keypoints, scores, save_path)
+
+
 class PyOpenPoseNative:
+    """Wrapper for the native openpose python interface. """
 
     def __init__(self,
                  params: Optional[dict] = None,
@@ -245,7 +306,12 @@ class PyOpenPoseNative:
 
         if tracks is not None:
             for track in tracks:
-                bb = track.to_tlbr()
+                try:
+                    # deepsort
+                    bb = track.to_tlbr()
+                except AttributeError:
+                    # bytetrack
+                    bb = track.tlbr
                 l, t, r, b = bb
                 tl = (np.floor(l).astype(int), np.floor(t).astype(int))
                 br = (np.ceil(r).astype(int), np.ceil(b).astype(int))
@@ -296,60 +362,74 @@ class PyOpenPoseNative:
         return
 
 
-def get_3d_skeleton(skeleton: np.ndarray,
-                    depth_img: np.ndarray,
-                    intr_mat: Union[list, np.ndarray],
-                    depth_scale: float = 1e-3,
-                    patch_offset: int = 2,
-                    ntu_format: bool = False) -> np.ndarray:
-    if isinstance(intr_mat, list):
-        fx = intr_mat[0]
-        fy = intr_mat[4]
-        cx = intr_mat[2]
-        cy = intr_mat[5]
-    elif isinstance(intr_mat, np.ndarray):
-        fx = intr_mat[0, 0]
-        fy = intr_mat[1, 1]
-        cx = intr_mat[0, 2]
-        cy = intr_mat[1, 2]
-    else:
-        raise ValueError("Unknown intr_mat format.")
-    H, W = depth_img.shape
-    joints3d = []
-    for x, y, _ in skeleton:
-        patch = depth_img[
-            max(0, int(y-patch_offset)):min(H, int(y+patch_offset)),  # noqa
-            max(0, int(x-patch_offset)):min(W, int(x+patch_offset))  # noqa
-        ]
-        depth_avg = np.mean(patch)
-        x3d = (x-cx) / fx * depth_avg
-        y3d = (y-cy) / fy * depth_avg
-        if ntu_format:
-            joints3d.append([-x3d*depth_scale, -depth_avg*depth_scale,
-                             -y3d*depth_scale])
+class OpenPosePoseExtractor:
+    """A high level wrapper for the `PyOpenPoseNative` class. This class only
+    has functions that intialize openpose, infer + save pose, and display pose.
+    """
+
+    def __init__(self, args: argparse.Namespace) -> None:
+        self.pyop = PyOpenPoseNative(
+            dict(
+                model_folder=args.op_model_folder,
+                model_pose=args.op_model_pose,
+                net_resolution=args.op_net_resolution,
+                heatmaps_add_parts=args.op_heatmaps_add_parts,
+                heatmaps_add_bkg=args.op_heatmaps_add_bkg,
+                heatmaps_add_PAFs=args.op_heatmaps_add_PAFs,
+                heatmaps_scale=args.op_heatmaps_scale,
+            ),
+            args.op_skel_thres,
+            args.op_max_true_body,
+            args.op_patch_offset,
+            args.op_ntu_format
+        )
+        self.pyop.initialize()
+
+    def predict(self,
+                image: np.ndarray,
+                kpt_save_path: Optional[str] = None,
+                skel_image_save_path: Optional[str] = None) -> None:
+        self.pyop.predict(image)
+        self.pyop.filter_prediction()
+        if kpt_save_path is not None:
+            self.pyop.save_pose_keypoints(kpt_save_path)
+        if skel_image_save_path is not None:
+            self.pyop.save_skeleton_image(skel_image_save_path)
+        # print(f"[INFO] : Openpose output saved in {kpt_save_path}")
+
+    def predict_3d(self,
+                   image: np.ndarray,
+                   depth: np.ndarray,
+                   intr_mat: np.ndarray,
+                   depth_scale: float = 1e-3,
+                   kpt_save_path: Optional[str] = None,
+                   kpt_3d_save_path: Optional[str] = None,
+                   skel_image_save_path: Optional[str] = None) -> None:
+        self.predict(image, kpt_save_path, skel_image_save_path)
+        self.pyop.convert_to_3d(
+            depth_image=depth,
+            intr_mat=intr_mat,
+            depth_scale=depth_scale
+        )
+        if kpt_3d_save_path is not None:
+            self.pyop.save_3d_pose_keypoints(kpt_3d_save_path)
+
+    def display(self,
+                dev: str = "1",
+                speed: int = 1000,
+                scale: int = 1.0,
+                image: Optional[np.ndarray] = None,
+                bounding_box: bool = False,
+                tracks=None):
+        if self.pyop.datum.poseScores is None:
+            cv2.imshow(str(dev), image)
+            cv2.waitKey(speed)
         else:
-            joints3d.append([x3d, y3d, depth_avg])
-    return np.array(joints3d)
-
-
-def save_2d_skeleton(keypoints: Optional[np.ndarray],
-                     scores: Optional[np.ndarray],
-                     save_path: str) -> None:
-    # keypoints: [M, V, C]; C = (x,y,score)
-    # scores: [M]
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
-    if keypoints is None:
-        open(save_path, 'a').close()
-    else:
-        M, _, _ = keypoints.shape
-        data = np.concatenate([scores.reshape((M, 1)),
-                               keypoints.reshape((M, -1))], axis=1)
-        np.savetxt(save_path, data, delimiter=',')
-
-
-def save_3d_skeleton(keypoints: Optional[np.ndarray],
-                     scores: Optional[np.ndarray],
-                     save_path: str) -> None:
-    # keypoints: [M, V, C]; C = (x,y,z)
-    # scores: [M]
-    return save_2d_skeleton(keypoints, scores, save_path)
+            _image = cv2.resize(image, (int(image.shape[1]*scale),
+                                        int(image.shape[0]*scale)))
+            cv2.imshow(str(dev)+"_ori", _image)
+            self.pyop.display(str(dev),
+                              scale=scale,
+                              speed=speed,
+                              bounding_box=bounding_box,
+                              tracks=tracks)

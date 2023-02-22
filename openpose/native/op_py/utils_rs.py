@@ -62,24 +62,6 @@ def read_color_file(filename: str,
     return image
 
 
-def read_color_file_with_exception(error_state: bool,
-                                   error_counter: int,
-                                   filename: str,
-                                   fileformat: Optional[str] = None
-                                   ) -> Tuple[np.ndarray, bool, int]:
-    try:
-        image = read_color_file(filename, fileformat)
-    except Exception as e:
-        image = None
-        print(e)
-        print("[WARN] : Error in loading data, will retry...")
-        error_counter += 1
-        if error_counter > 300:
-            print("[ERRO] Retried 300 times and failed...")
-            error_state = True
-    return image, error_state, error_counter
-
-
 # From:
 # https://github.com/cheneeheng/realsense-simple-wrapper/blob/main/rs_py/rs_view_raw_data.py
 def read_depth_file(filename: str) -> np.ndarray:
@@ -89,22 +71,6 @@ def read_depth_file(filename: str) -> np.ndarray:
     else:
         depth = np.fromfile(filename, np.uint16)
     return depth
-
-
-def read_depth_file_with_exception(error_state: bool,
-                                   error_counter: int,
-                                   filename: str
-                                   ) -> Tuple[np.ndarray, bool, int]:
-    try:
-        depth = read_depth_file(filename)
-    except Exception as e:
-        print(e)
-        print("[WARN] : Error in loading data, will retry...")
-        error_counter += 1
-        if error_counter > 300:
-            print("[ERRO] Retried 300 times and failed...")
-            error_state = True
-    return depth, error_state, error_counter
 
 
 # From:
@@ -157,10 +123,13 @@ def read_calib_file(calib_file: str) -> dict:
     return calib_data
 
 
-def prepare_save_paths(skel_filepath: str,
+def prepare_save_paths(skel_filepath: Optional[str] = None,
                        save_skel: bool = False,
                        save_skel_image: bool = False,
-                       save_3d_skel: bool = False):
+                       save_3d_skel: bool = False) -> tuple:
+    if skel_filepath is None:
+        return [None, None, None]
+
     if save_skel:
         csv_path = skel_filepath
     else:
@@ -174,4 +143,4 @@ def prepare_save_paths(skel_filepath: str,
         jpg_path = _path.split('.')[0] + '.jpg'
     else:
         jpg_path = None
-    return [csv_path, jpg_path, csv_3d_path]
+    return [csv_path, csv_3d_path, jpg_path]

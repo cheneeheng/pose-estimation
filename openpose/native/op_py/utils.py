@@ -4,19 +4,32 @@ import time
 import numpy as np
 
 
-class Timer(object):
-    def __init__(self, text: str = '') -> None:
+class Timer:
+    def __init__(self, text: str = '', enable: bool = True) -> None:
         self._t_start = None
         self._text = text
+        self._enable = enable
 
     def __enter__(self) -> None:
-        self._t_start = time.time()
+        if self._enable:
+            self._t_start = time.time()
 
     def __exit__(self, *args) -> None:
-        _duration = time.time() - self._t_start
-        print(f"Finished {self._text} in : {_duration:.6f} s")
+        if self._enable:
+            _duration = time.time() - self._t_start
+            print(f"[INFO] : Timer >>> "
+                  f"{self._text: <40} >>> "
+                  f"{_duration:.6f} s")
 
-# using with statement with MessageWriter
+
+class Error:
+    def __init__(self):
+        self.state = False
+        self.counter = 0
+
+    def reset(self):
+        self.state = False
+        self.counter = 0
 
 
 def str2bool(v: str) -> bool:
