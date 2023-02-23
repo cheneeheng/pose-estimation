@@ -11,6 +11,8 @@ from submodules.ByteTrack.yolox.tracker.byte_tracker import BYTETracker
 from submodules.ByteTrack.yolox.tracker.byte_tracker import STrack
 from submodules.ByteTrack.yolox.tracker.byte_tracker import joint_stracks
 
+from submodules.OC_SORT.trackers.ocsort_tracker.ocsort import OCSort
+
 
 class DeepSortTrackerArgs():
     metric = 'cosine'
@@ -31,6 +33,18 @@ class ByteTrackerArgs():
     mot20 = False
 
 
+class OCSortArgs():
+    def __init__(self) -> None:
+        self.det_thresh = 0.5
+        self.max_age = 30
+        self.min_hits = 3
+        self.iou_threshold = 0.3
+        self.delta_t = 3
+        self.asso_func = "iou"
+        self.inertia = 0.2
+        self.use_byte = False
+
+
 # Tracking inspired by : https://github.com/ortegatron/liveposetracker
 class Tracker():
 
@@ -41,7 +55,12 @@ class Tracker():
             max_age (int, optional): How long an untracked obj stays alive.
                 Same as buffer_size in byte tracker. Defaults to 30.
         """
-        if mode == 'byte_tracker':
+        if mode == 'oc_sort':
+            args = OCSortArgs()
+            args.max_age = max_age
+            self.tracker = OCSort(**args.__dict__)
+            self.name = 'oc_sort'
+        elif mode == 'byte_tracker':
             args = ByteTrackerArgs()
             args.track_buffer = max_age
             self.tracker = BYTETracker(args)
@@ -62,6 +81,8 @@ class Tracker():
             return self.tracker.tracks
         elif self.name == 'byte_tracker':
             return self.tracker.tracked_stracks
+        elif self.name == 'oc_sort':
+            return self.tracker.tracks()
 
     def predict(self):
         if self.name == 'byte_tracker':
@@ -73,6 +94,12 @@ class Tracker():
             self.detections = self._create_detections(pyop, image_size)
             self.tracker.update(self.detections)
         elif self.name == 'byte_tracker':
+            boxes = pyop.pose_bounding_box.copy()
+            scores = pyop.pose_scores.copy()
+            detections = np.concatenate(
+                [boxes, scores.reshape([len(scores), 1])], axis=1)
+            self.tracker.update(detections)
+        elif self.name == 'oc_sort':
             boxes = pyop.pose_bounding_box.copy()
             scores = pyop.pose_scores.copy()
             detections = np.concatenate(
