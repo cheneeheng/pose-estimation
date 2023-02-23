@@ -8,3 +8,6 @@
 [submodule "ByteTrack"]
 	path = ByteTrack
 	url = git@github.com:cheneeheng/ByteTrack.git
+[submodule "OC_SORT"]
+	path = OC_SORT
+	url = git@github.com:cheneeheng/OC_SORT.git
