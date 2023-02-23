@@ -48,8 +48,10 @@ RUN apt-get install -y \
 # ------------------------------------------------------------------------------
 # pip
 WORKDIR /tmp
-COPY ./requirements/requirements_openpose.txt /tmp
-RUN python3 -m pip install -r /tmp/requirements_openpose.txt
+COPY ./requirements/requirements_*.txt /tmp
+RUN python3 -m pip install -r /tmp/requirements_main.txt
+RUN python3 -m pip install -r /tmp/requirements_devel.txt
+RUN python3 -m pip install -r /tmp/requirements_extra.txt
 
 # ------------------------------------------------------------------------------
 # TAKEN FROM : https://github.com/esemeniuc/openpose-docker/blob/master/Dockerfile

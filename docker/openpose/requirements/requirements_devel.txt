@@ -5,22 +5,4 @@ pep8
 autopep8
 pycodestyle
 
-numpy
-pillow
-matplotlib
-imageio
 IPython
-
-opencv-python
-
-# tensorflow==2.5.0
-# tensorflow-hub
-
-tqdm
-
-# pyrealsense2
-
-scipy
-lap
-
-cython
