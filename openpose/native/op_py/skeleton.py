@@ -307,7 +307,7 @@ class PyOpenPoseNative:
         if tracks is not None:
             for track in tracks:
                 try:
-                    # deepsort
+                    # deepsort / ocsort
                     bb = track.to_tlbr()
                 except AttributeError:
                     # bytetrack

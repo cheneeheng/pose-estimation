@@ -245,6 +245,8 @@ def rs_offline_inference_and_tracking(args: argparse.Namespace):
         TK = Tracker('deep_sort', 30//delay_switch)
     elif args.op_track_bytetrack:
         TK = Tracker('byte_tracker', 30//delay_switch)
+    elif args.op_track_ocsort:
+        TK = Tracker('oc_sort', 30//delay_switch)
     else:
         raise ValueError("Not implemented...")
 
@@ -280,9 +282,9 @@ def rs_offline_inference_and_tracking(args: argparse.Namespace):
             # 5. loop through filepaths of color image
             for color_filepath in color_filepaths:
 
-                if _c < 300:
-                    _c += 1
-                    continue
+                # if _c < 300:
+                #     _c += 1
+                #     continue
 
                 print(f"[INFO] : {color_filepath}")
 
@@ -316,7 +318,10 @@ def rs_offline_inference_and_tracking(args: argparse.Namespace):
                                              enable_time)
 
                 if TK is not None:
-                    if TK.name == 'byte_tracker':
+                    if TK.name == 'oc_sort':
+                        with Timer("update", enable_time):
+                            TK.update(PE.pyop)
+                    elif TK.name == 'byte_tracker':
                         with Timer("update", enable_time):
                             TK.update(PE.pyop)
                     else:

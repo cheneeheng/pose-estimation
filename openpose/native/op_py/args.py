@@ -104,12 +104,16 @@ def get_parser() -> argparse.ArgumentParser:
     # TRACKING OPTIONS ---------------------------------------------------------
     p.add_argument('--op-track-deepsort',
                    type=str2bool,
-                   default=True,
+                   default=False,
                    help='If true performs deepsort tracking.')
     p.add_argument('--op-track-bytetrack',
                    type=str2bool,
                    default=False,
                    help='If true performs ByteTrack tracking.')
+    p.add_argument('--op-track-ocsort',
+                   type=str2bool,
+                   default=True,
+                   help='If true performs OC Sort tracking.')
     p.add_argument('--op-track-buffer',
                    type=int,
                    default=30,
