@@ -1,13 +1,13 @@
 
 [submodule "deep_sort"]
-	path = deep_sort
+	path = submodules/deep_sort
 	url = git@github.com:cheneeheng/deep_sort.git
 [submodule "realsense-simple-wrapper"]
-	path = realsense-simple-wrapper
+	path = submodules/realsense-simple-wrapper
 	url = git@github.com:cheneeheng/realsense-simple-wrapper.git
 [submodule "ByteTrack"]
-	path = ByteTrack
+	path = submodules/ByteTrack
 	url = git@github.com:cheneeheng/ByteTrack.git
 [submodule "OC_SORT"]
-	path = OC_SORT
+	path = submodules/OC_SORT
 	url = git@github.com:cheneeheng/OC_SORT.git
