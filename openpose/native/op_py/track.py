@@ -4,12 +4,12 @@ from .skeleton import PyOpenPoseNative
 from .utils import Timer
 from .utils_track import create_detections
 
-from deep_sort.deep_sort.tracker import Tracker as DeepSortTracker
-from deep_sort.deep_sort.nn_matching import NearestNeighborDistanceMetric
+from submodules.deep_sort.deep_sort.tracker import Tracker as DeepSortTracker
+from submodules.deep_sort.deep_sort.nn_matching import NearestNeighborDistanceMetric  # noqa
 
-from ByteTrack.yolox.tracker.byte_tracker import BYTETracker
-from ByteTrack.yolox.tracker.byte_tracker import STrack
-from ByteTrack.yolox.tracker.byte_tracker import joint_stracks
+from submodules.ByteTrack.yolox.tracker.byte_tracker import BYTETracker
+from submodules.ByteTrack.yolox.tracker.byte_tracker import STrack
+from submodules.ByteTrack.yolox.tracker.byte_tracker import joint_stracks
 
 
 class DeepSortTrackerArgs():

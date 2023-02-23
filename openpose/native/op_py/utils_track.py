@@ -3,12 +3,10 @@ import numpy as np
 from typing import Optional, Tuple
 
 from .utils import resize_tensor
-from deep_sort.deep_sort.detection import Detection
+from submodules.deep_sort.deep_sort.detection import Detection
 
 
 # Tracking inspired by : https://github.com/ortegatron/liveposetracker
-
-
 class PoseDetection(Detection):
     """
     Based on deep_sort/deep_sort/detection.py
