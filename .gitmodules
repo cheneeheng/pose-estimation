@@ -11,3 +11,6 @@
 [submodule "OC_SORT"]
 	path = submodules/OC_SORT
 	url = git@github.com:cheneeheng/OC_SORT.git
+[submodule "submodules/StrongSORT"]
+	path = submodules/StrongSORT
+	url = git@github.com:cheneeheng/StrongSORT.git
