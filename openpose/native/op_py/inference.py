@@ -25,7 +25,7 @@ def _dict_check(x: dict):
     return True if c == len(x) else False
 
 
-def rs_online_inference(args: argparse,
+def rs_online_inference(args: argparse.Namespace,
                         pose_extractor: OpenPosePoseExtractor,
                         color_filepath: str,
                         depth_filepath: Optional[str] = None,
@@ -34,7 +34,7 @@ def rs_online_inference(args: argparse,
     """Extract pose using openpose per realsense image.
 
     Args:
-        args (argparse): inputs args.
+        args (argparse.Namespace): inputs args.
         pose_extractor (OpenPosePoseExtractor): Openpose wrapper class.
         color_filepath (str): path to rgb image.
         depth_filepath (Optional[str], optional): path to depth image.

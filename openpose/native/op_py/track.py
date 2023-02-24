@@ -15,6 +15,7 @@ from submodules.ByteTrack.yolox.tracker.byte_tracker import joint_stracks
 
 from submodules.OC_SORT.trackers.ocsort_tracker.ocsort import OCSort
 
+from submodules.StrongSORT.opts import opt
 from submodules.StrongSORT.deep_sort.tracker import Tracker as StrongSortTracker
 
 
@@ -55,34 +56,39 @@ class OCSortArgs:
 class StrongSortTrackerArgs:
     def __init__(self) -> None:
         self.metric = 'cosine'
-        # # max_cosine_distance
-        # self.matching_threshold = 0.2
-        # # default is None
-        # self.nn_budget = None
 
-        self.nsa = True
-        # self.nsa = False
+        # # DEFAULTS
+        # self.bot = True  # the REID model used
+        # if self.bot:
+        #     self.matching_threshold = 0.4
+        # else:
+        #     self.matching_threshold = 0.3
+        # if self.mc_lambda is not None:
+        #     self.matching_threshold += 0.05
+        # if self.ema_alpha is not None:
+        #     self.nn_budget = 1
+        # else:
+        #     self.nn_budget = 100
 
-        self.woc = True
-        # self.woc = False
+        nsa = True
+        # nsa = False
 
-        self.ema_alpha = 0.9
-        # self.ema_alpha = None
+        woc = True
+        # woc = False
 
-        self.mc_lambda = 0.98
-        # self.mc_lambda = None
+        ema_alpha = 0.9
+        # ema_alpha = None
 
-        self.bot = True  # the REID model used
-        if self.bot:
-            self.matching_threshold = 0.4
-        else:
-            self.matching_threshold = 0.3
-        if self.mc_lambda is not None:
-            self.matching_threshold += 0.05
-        if self.ema_alpha is not None:
-            self.nn_budget = 1
-        else:
-            self.nn_budget = 100
+        mc_lambda = 0.98
+        # mc_lambda = None
+
+        self.opt = opt
+        self.opt.NSA = nsa
+        self.opt.EMA = True if ema_alpha is not None else False
+        self.opt.MC = True if mc_lambda is not None else False
+        self.opt.woC = woc
+        self.opt.EMA_alpha = ema_alpha
+        self.opt.MC_lambda = mc_lambda
 
 
 # Tracking inspired by : https://github.com/ortegatron/liveposetracker
@@ -117,11 +123,9 @@ class Tracker():
             self.name = 'strong_sort'
             args = StrongSortTrackerArgs()
             metric = NearestNeighborDistanceMetric(
-                args.metric, args.matching_threshold, args.nn_budget)
+                args.metric, args.opt.max_cosine_distance, args.opt.nn_budget)
             self.tracker = StrongSortTracker(
-                metric, max_age=max_age, woc=args.woc,
-                ema_alpha=args.ema_alpha, mc_lambda=args.mc_lambda,
-                nsa=args.nsa)
+                metric, max_age=max_age, options=args.opt)
         else:
             raise ValueError("Not implemented...")
 
