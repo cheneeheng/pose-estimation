@@ -25,7 +25,7 @@ def _dict_check(x: dict):
     return True if c == len(x) else False
 
 
-def rs_online_inference(args: argparse,
+def rs_online_inference(args: argparse.Namespace,
                         pose_extractor: OpenPosePoseExtractor,
                         color_filepath: str,
                         depth_filepath: Optional[str] = None,
@@ -34,7 +34,7 @@ def rs_online_inference(args: argparse,
     """Extract pose using openpose per realsense image.
 
     Args:
-        args (argparse): inputs args.
+        args (argparse.Namespace): inputs args.
         pose_extractor (OpenPosePoseExtractor): Openpose wrapper class.
         color_filepath (str): path to rgb image.
         depth_filepath (Optional[str], optional): path to depth image.
@@ -247,6 +247,8 @@ def rs_offline_inference_and_tracking(args: argparse.Namespace):
         TK = Tracker('byte_tracker', 30//delay_switch)
     elif args.op_track_ocsort:
         TK = Tracker('oc_sort', 30//delay_switch)
+    elif args.op_track_strongsort:
+        TK = Tracker('strong_sort', 30//delay_switch)
     else:
         raise ValueError("Not implemented...")
 
@@ -282,9 +284,9 @@ def rs_offline_inference_and_tracking(args: argparse.Namespace):
             # 5. loop through filepaths of color image
             for color_filepath in color_filepaths:
 
-                # if _c < 300:
-                #     _c += 1
-                #     continue
+                if _c < 200:
+                    _c += 1
+                    continue
 
                 print(f"[INFO] : {color_filepath}")
 
@@ -318,19 +320,14 @@ def rs_offline_inference_and_tracking(args: argparse.Namespace):
                                              enable_time)
 
                 if TK is not None:
-                    if TK.name == 'oc_sort':
-                        with Timer("update", enable_time):
-                            TK.update(PE.pyop)
-                    elif TK.name == 'byte_tracker':
-                        with Timer("update", enable_time):
-                            TK.update(PE.pyop)
-                    else:
-                        with Timer("predict", enable_time):
-                            TK.predict()
+                    if TK.name == 'deep_sort' or TK.name == 'strong_sort':
                         with Timer("update", enable_time):
                             TK.update(PE.pyop,
                                       (args.op_rs_image_width,
                                        args.op_rs_image_height))
+                    elif TK.name == 'byte_tracker' or TK.name == 'oc_sort':
+                        with Timer("update", enable_time):
+                            TK.update(PE.pyop)
 
                 PE.display(dev=dev,
                            speed=display_speed,
