@@ -6,9 +6,6 @@ from .skeleton import PyOpenPoseNative
 from .utils import Timer
 from .utils_track import create_detections
 
-from submodules.deep_sort.deep_sort.tracker import Tracker as DeepSortTracker
-from submodules.deep_sort.deep_sort.nn_matching import NearestNeighborDistanceMetric  # noqa
-
 from submodules.ByteTrack.yolox.tracker.byte_tracker import BYTETracker
 from submodules.ByteTrack.yolox.tracker.byte_tracker import STrack
 from submodules.ByteTrack.yolox.tracker.byte_tracker import joint_stracks
@@ -17,14 +14,23 @@ from submodules.OC_SORT.trackers.ocsort_tracker.ocsort import OCSort
 
 from submodules.StrongSORT.opts import opt
 from submodules.StrongSORT.deep_sort.tracker import Tracker as StrongSortTracker
+from submodules.StrongSORT.deep_sort.nn_matching import NearestNeighborDistanceMetric  # noqa
 
 
 class DeepSortTrackerArgs:
-    metric = 'cosine'
-    # max_cosine_distance
-    matching_threshold = 0.2
-    # default is None
-    nn_budget = 100
+    def __init__(self) -> None:
+        self.metric = 'cosine'
+
+        self.opt = opt
+        self.opt.NSA = False
+        self.opt.EMA = None
+        self.opt.MC = None
+        self.opt.woC = False
+        self.opt.EMA_alpha = None
+        self.opt.MC_lambda = None
+
+        self.opt.max_cosine_distance = 0.2
+        self.opt.nn_budget = 100
 
 
 class ByteTrackerArgs:
@@ -107,8 +113,9 @@ class Tracker():
             self.name = 'deep_sort'
             args = DeepSortTrackerArgs()
             metric = NearestNeighborDistanceMetric(
-                args.metric, args.matching_threshold, args.nn_budget)
-            self.tracker = DeepSortTracker(metric, max_age=max_age)
+                args.metric, args.opt.max_cosine_distance, args.opt.nn_budget)
+            self.tracker = StrongSortTracker(
+                metric, max_age=max_age, options=args.opt)
         elif mode == 'byte_tracker':
             self.name = 'byte_tracker'
             args = ByteTrackerArgs()
