@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=nvidia/cuda:11.5.2-cudnn8-devel-ubuntu20.04
+ARG BASE_IMAGE=ubuntu:20.04
 
 FROM ${BASE_IMAGE}
 
@@ -70,13 +70,10 @@ RUN cmake \
     -DDOWNLOAD_BODY_MPI_MODEL:Bool=ON \
     -DDOWNLOAD_FACE_MODEL:Bool=OFF \
     -DDOWNLOAD_HAND_MODEL:Bool=OFF \
-    -DCUDA_ARCH:String=Manual \
-    -DCUDA_ARCH_BIN:String="6.1 7.5" \
-    -DCUDA_ARCH_PTX:String="7.5" \
-    -DUSE_CUDNN:Bool=ON \
-    -DBUILD_PYTHON:Bool=ON \
-    -DPYTHON_EXECUTABLE:String=$(which python3) \
-    -DPYTHON_LIBRARY:String="/usr/lib/x86_64-linux-gnu/libpython3.8.so" ..
+    -DGPU_MODE:String=CPU_ONLY \
+    -DBUILD_PYTHON=ON \
+    -DPYTHON_EXECUTABLE=$(which python3) \
+    -DPYTHON_LIBRARY="/usr/lib/x86_64-linux-gnu/libpython3.8.so" ..
 RUN make -j$(($(nproc) - 1))
 
 WORKDIR /usr/local/src/openpose/build/python/openpose
