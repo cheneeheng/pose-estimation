@@ -1,0 +1,61 @@
+ARG BASE_IMAGE=nvidia/cuda:11.7.1-cudnn8-devel-ubuntu20.04
+
+FROM ${BASE_IMAGE}
+
+ENV LANG en_US.UTF-8
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+ENV TZ=Europe/Berlin
+
+# ------------------------------------------------------------------------------
+# Main apts 
+RUN rm -rf /var/lib/apt/lists/* \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \	
+    sudo \
+    nano \
+    unzip \
+    wget \
+    curl \
+    git \
+    cmake \
+    tzdata \
+    ssh
+
+# ------------------------------------------------------------------------------
+# Python 3.8
+RUN apt-get install -y python3.8 python3.8-dev && \
+    ln -s /usr/bin/python3.8 /usr/bin/python && \
+    ln -s /usr/bin/python3.8 /usr/bin/python3 && \
+    apt-get install -y python3-pip python3-tk; exit 0
+## Keeps Python from generating .pyc files in the container
+ENV PYTHONDONTWRITEBYTECODE=1
+## Turns off buffering for easier container logging
+ENV PYTHONUNBUFFERED=1
+
+# ------------------------------------------------------------------------------
+# Apt libraries
+RUN apt-get install -y \
+    libprotobuf-dev \
+    protobuf-compiler \
+    libgoogle-glog-dev \
+    libboost-all-dev \
+    libhdf5-dev \
+    libatlas-base-dev \
+    libopencv-dev
+
+# ------------------------------------------------------------------------------
+# pip
+WORKDIR /tmp
+COPY ./requirements/*.txt /tmp
+RUN python3 -m pip install -r /tmp/main.txt
+RUN python3 -m pip install -r /tmp/devel.txt
+RUN python3 -m pip install -r /tmp/extra.txt
+RUN python3 -m pip install -r /tmp/gpu.txt
+
+WORKDIR /usr/local/src/alphapose
+RUN git clone https://github.com/MVIG-SJTU/AlphaPose.git .
+#RUN python3 setup.py build develop
+
+WORKDIR /code

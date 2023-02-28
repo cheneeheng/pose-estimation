@@ -5,7 +5,7 @@
 
 BASE_IMAGE="nvidia/cuda:10.2-cudnn7-devel-ubuntu18.04"
 IMAGE_NAME="openpose:cuda10.2-cudnn7-devel-ubuntu18.04"
-DOCKER_FILE="dockerfiles/Dockerfile.U18Openpose"
+DOCKER_FILE="dockerfiles/Dockerfile.U18"
 
 # BUILD OPENPOSE IMAGE ---------------------------------------------------------
 echo "Building image : ${IMAGE_NAME}"

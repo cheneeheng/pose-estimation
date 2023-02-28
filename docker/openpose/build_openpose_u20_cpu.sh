@@ -5,7 +5,7 @@
 
 BASE_IMAGE="ubuntu:20.04"
 IMAGE_NAME="openpose:ubuntu20.04"
-DOCKER_FILE="dockerfiles/Dockerfile.U20OpenposeCPU"
+DOCKER_FILE="dockerfiles/Dockerfile.U20CPU"
 
 # BUILD OPENPOSE IMAGE ---------------------------------------------------------
 echo "Building image : ${IMAGE_NAME}"

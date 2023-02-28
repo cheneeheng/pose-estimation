@@ -116,5 +116,8 @@ dmypy.json
 .devcontainer/
 .vscode/
 
+*devcontainer*
+docker-compose.yml
+
 openpose/native/wrapper/2s_agcn/
 openpose/output/

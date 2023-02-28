@@ -1,19 +1,5 @@
 # To ensure app dependencies are ported from your virtual environment/host machine into your container, run 'pip freeze > requirements.txt' in the terminal to overwrite this file
 
-tqdm
-
-numpy
-
-pillow
-imageio
-opencv-python
-
-matplotlib
-
-scipy
-scikit-learn
-
-# tensorflow==2.5.0
-# tensorflow-hub
-
-# pyrealsense2
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==1.13.1+cpu
+torchvision==0.14.1+cpu

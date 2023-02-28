@@ -1,0 +1,5 @@
+ARG BASE_IMAGE=alphapose:cuda11.7.1-cudnn8-devel-ubuntu20.04
+FROM ${BASE_IMAGE}
+
+WORKDIR /code/pose-estimation
+ENTRYPOINT["/bin/bash", "-c", "cd /usr/local/src/alphapose && python3 setup.py build develop && cd /code/pose-estimation"]

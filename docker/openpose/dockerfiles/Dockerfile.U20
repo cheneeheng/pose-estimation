@@ -1,0 +1,89 @@
+ARG BASE_IMAGE=nvidia/cuda:11.5.2-cudnn8-devel-ubuntu20.04
+
+FROM ${BASE_IMAGE}
+
+ENV LANG en_US.UTF-8
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+ENV TZ=Europe/Berlin
+
+# ------------------------------------------------------------------------------
+# Main apts 
+RUN rm -rf /var/lib/apt/lists/* \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \	
+    sudo \
+    nano \
+    unzip \
+    wget \
+    curl \
+    git \
+    cmake \
+    tzdata \
+    ssh
+
+# ------------------------------------------------------------------------------
+# Python 3.8
+RUN apt-get install -y python3.8 python3.8-dev && \
+    ln -s /usr/bin/python3.8 /usr/bin/python && \
+    ln -s /usr/bin/python3.8 /usr/bin/python3 && \
+    apt-get install -y python3-pip python3-tk; exit 0
+## Keeps Python from generating .pyc files in the container
+ENV PYTHONDONTWRITEBYTECODE=1
+## Turns off buffering for easier container logging
+ENV PYTHONUNBUFFERED=1
+
+# ------------------------------------------------------------------------------
+# Apt libraries
+RUN apt-get install -y \
+    libprotobuf-dev \
+    protobuf-compiler \
+    libgoogle-glog-dev \
+    libboost-all-dev \
+    libhdf5-dev \
+    libatlas-base-dev \
+    libopencv-dev
+
+# ------------------------------------------------------------------------------
+# pip
+WORKDIR /tmp
+COPY ./requirements/*.txt /tmp
+RUN python3 -m pip install -r /tmp/main.txt
+RUN python3 -m pip install -r /tmp/devel.txt
+RUN python3 -m pip install -r /tmp/extra.txt
+
+# ------------------------------------------------------------------------------
+# TAKEN FROM : https://github.com/esemeniuc/openpose-docker/blob/master/Dockerfile
+# and : https://hub.docker.com/r/cwaffles/openpose
+# RUN wget https://github.com/Kitware/CMake/releases/download/v3.21.1/cmake-3.21.1-Linux-x86_64.tar.gz && \
+#     tar xzf cmake-3.21.1-Linux-x86_64.tar.gz -C /opt && \
+#     rm cmake-3.21.1-Linux-x86_64.tar.gz
+# ENV PATH="/opt/cmake-3.21.1-linux-x86_64/bin:${PATH}"
+
+WORKDIR /usr/local/src/openpose
+RUN git clone https://github.com/CMU-Perceptual-Computing-Lab/openpose.git .
+WORKDIR /usr/local/src/openpose/build
+RUN cmake \
+    -DDOWNLOAD_BODY_25_MODEL:Bool=ON \
+    -DDOWNLOAD_BODY_COCO_MODEL:Bool=ON \
+    -DDOWNLOAD_BODY_MPI_MODEL:Bool=ON \
+    -DDOWNLOAD_FACE_MODEL:Bool=OFF \
+    -DDOWNLOAD_HAND_MODEL:Bool=OFF \
+    -DCUDA_ARCH:String=Manual \
+    -DCUDA_ARCH_BIN:String="6.1 7.5" \
+    -DCUDA_ARCH_PTX:String="7.5" \
+    -DUSE_CUDNN:Bool=ON \
+    -DBUILD_PYTHON:Bool=ON \
+    -DPYTHON_EXECUTABLE:String=$(which python3) \
+    -DPYTHON_LIBRARY:String="/usr/lib/x86_64-linux-gnu/libpython3.8.so" ..
+RUN make -j$(($(nproc) - 1))
+
+WORKDIR /usr/local/src/openpose/build/python/openpose
+RUN make install
+
+RUN cp ./pyopenpose.cpython-38-x86_64-linux-gnu.so /usr/local/lib/python3.8/dist-packages
+RUN ln -s /usr/local/lib/python3.8/dist-packages/pyopenpose.cpython-38-x86_64-linux-gnu.so /usr/local/lib/python3.8/dist-packages/pyopenpose
+ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/src/openpose/build/python/openpose"
+
+WORKDIR /code

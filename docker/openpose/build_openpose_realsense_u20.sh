@@ -4,7 +4,7 @@
 # 2 ARGS IN ORDER: {USERNAME}, {PID}
 
 BASE_IMAGE="nvidia/cuda:11.5.2-cudnn8-devel-ubuntu20.04"
-DOCKER_FILE="dockerfiles/Dockerfile.U20Openpose"
+DOCKER_FILE="dockerfiles/Dockerfile.U20"
 
 BASE_NAME="cuda11.5.2-cudnn8-devel-ubuntu20.04"
 OP_IMAGE_NAME="openpose:${BASE_NAME}"
