@@ -11,3 +11,6 @@
 [submodule "submodules/StrongSORT"]
 	path = submodules/StrongSORT
 	url = git@github.com:cheneeheng/StrongSORT.git
+[submodule "submodules/AlphaPose"]
+	path = submodules/AlphaPose
+	url = git@github.com:cheneeheng/AlphaPose.git
