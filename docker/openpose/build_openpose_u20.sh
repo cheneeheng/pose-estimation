@@ -3,8 +3,8 @@
 # This script builds openpose image.
 # 2 ARGS IN ORDER: {USERNAME}, {PID}
 
-BASE_IMAGE="nvidia/cuda:11.5.2-cudnn8-devel-ubuntu20.04"
-IMAGE_NAME="openpose:cuda11.5.2-cudnn8-devel-ubuntu20.04"
+BASE_IMAGE="nvidia/cuda:11.7.1-cudnn8-devel-ubuntu20.04"
+IMAGE_NAME="openpose:cuda11.7.1-cudnn8-devel-ubuntu20.04"
 DOCKER_FILE="dockerfiles/Dockerfile.U20"
 
 # BUILD OPENPOSE IMAGE ---------------------------------------------------------

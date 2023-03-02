@@ -3,10 +3,10 @@
 # builds an image with latest openpose + realsense + opencvgpu + (optional) add user
 # 2 ARGS IN ORDER: {USERNAME}, {PID}
 
-BASE_IMAGE="nvidia/cuda:11.5.2-cudnn8-devel-ubuntu20.04"
+BASE_IMAGE="nvidia/cuda:11.7.1-cudnn8-devel-ubuntu20.04"
 DOCKER_FILE="dockerfiles/Dockerfile.U20"
 
-BASE_NAME="cuda11.5.2-cudnn8-devel-ubuntu20.04"
+BASE_NAME="cuda11.7.1-cudnn8-devel-ubuntu20.04"
 OP_IMAGE_NAME="openpose:${BASE_NAME}"
 RS_IMAGE_NAME="openpose-librealsense:${BASE_NAME}-v2.50.0"
 CV_IMAGE_NAME="openpose-librealsense-opencvgpu:${BASE_NAME}-v2.50.0"

@@ -2,7 +2,7 @@
 
 # THIS SCRIPT REQUIRES 3 ARGS: CMD + host DATA_PATH + host CODE_PATH
 
-IMAGE_NAME="openpose-user:cuda11.5.2-cudnn8-devel-ubuntu20.04"
+IMAGE_NAME="openpose-user:cuda11.7.1-cudnn8-devel-ubuntu20.04"
 DATA_PATH=$2
 CODE_PATH=$3
 
