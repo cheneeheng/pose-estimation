@@ -39,8 +39,12 @@ parser.add_argument('--vis',
                     default=False,
                     action='store_true',
                     help='visualize image')
+parser.add_argument('--final_img_scale',
+                    type=float,
+                    default=0.5,
+                    help='scale of visualized/saved image')
 parser.add_argument('--showbox',
-                    default=False,
+                    default=True,
                     action='store_true',
                     help='visualize human bbox')
 parser.add_argument('--profile',
@@ -55,11 +59,11 @@ parser.add_argument('--min_box_area',
                     help='min box area to filter out')
 parser.add_argument('--detbatch',
                     type=int,
-                    default=5,
+                    default=1,  # 5
                     help='detection batch size PER GPU')
 parser.add_argument('--posebatch',
                     type=int,
-                    default=64,
+                    default=1,  # 64
                     help='pose estimation maximum batch size PER GPU')
 parser.add_argument('--gpus', dest='gpus',
                     type=str,
@@ -75,7 +79,7 @@ parser.add_argument('--detfile', dest='detfile',
                     default="")
 parser.add_argument('--qsize', dest='qsize',
                     type=int,
-                    default=256,  # 1024
+                    default=16,  # 1024
                     help='the length of result buffer, where reducing it will lower requirement of cpu memory')  # noqa
 parser.add_argument('--flip',
                     default=False,
@@ -100,5 +104,8 @@ parser.add_argument('--pose_flow', dest='pose_flow',
                     help='track humans in video with PoseFlow', action='store_true', default=False)  # noqa
 parser.add_argument('--pose_track', dest='pose_track',
                     help='track humans in video with reid', action='store_true', default=False)  # noqa
+parser.add_argument('--pose_track_model', dest='pose_track_model',
+                    help='reid model', default='')  # noqa
+
 
 args = parser.parse_args()

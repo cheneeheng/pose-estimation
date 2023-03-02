@@ -121,3 +121,4 @@ docker-compose.yml
 
 openpose/native/wrapper/2s_agcn/
 openpose/output/
+openpose/data/

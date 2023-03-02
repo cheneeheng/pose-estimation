@@ -5,6 +5,7 @@ import numpy as np
 import pyopenpose as op
 
 from typing import Optional, Union, List, Tuple
+from .utils import get_color
 
 
 def get_3d_skeleton(skeleton: np.ndarray,
@@ -266,9 +267,7 @@ class PyOpenPoseNative:
                          save_path=save_path)
         return
 
-    def _draw_skeleton_image(self,
-                             depth_image: Optional[np.ndarray] = None,
-                             ) -> np.ndarray:
+    def _draw_skeleton_image(self, image: Optional[np.ndarray] = None) -> np.ndarray:  # noqa
         keypoint_image = self.opencv_image
         # keypoint_image = cv2.flip(keypoint_image, 1)
         cv2.putText(keypoint_image,
@@ -279,9 +278,9 @@ class PyOpenPoseNative:
                     (255, 0, 0),
                     2,
                     cv2.LINE_AA)
-        if depth_image is not None:
+        if image is not None:
             colormap = cv2.applyColorMap(
-                cv2.convertScaleAbs(depth_image, alpha=0.065, beta=0),
+                cv2.convertScaleAbs(image, alpha=0.065, beta=0),
                 cv2.COLORMAP_INFERNO
             )
             # colormap = cv2.flip(colormap, 1)
@@ -290,43 +289,60 @@ class PyOpenPoseNative:
             # overlay = cv2.resize(overlay, (800, 450))
         return keypoint_image
 
+    def _draw_skeleton_bounding_box_image(self, image: np.ndarray) -> np.ndarray:  # noqa
+        for idx, bb in enumerate(self.pose_bounding_box_int):
+            tl, br = bb[0:2], bb[2:4]
+            image = cv2.rectangle(image, tl, br, (0, 255, 0), 2)
+        return image
+
+    def _draw_bounding_box_tracking_image(self, image: np.ndarray, tracks: Optional[list] = None) -> np.ndarray:  # noqa
+        for track in tracks:
+            try:
+                # deepsort / ocsort
+                bb = track.to_tlbr()
+            except AttributeError:
+                # bytetrack
+                bb = track.tlbr
+            l, t, r, b = bb
+            tl = (np.floor(l).astype(int), np.floor(t).astype(int))
+            br = (np.ceil(r).astype(int), np.ceil(b).astype(int))
+            image = cv2.rectangle(image, tl, br, get_color(track.track_id), 1)
+            cv2.putText(image,
+                        f"ID : {track.track_id}",
+                        tl,
+                        cv2.FONT_HERSHEY_PLAIN,
+                        2,
+                        get_color(track.track_id),
+                        2,
+                        cv2.LINE_AA)
+        return image
+
     def display(self,
                 device_sn: str,
                 speed: int = 1000,
                 scale: float = 1.0,
                 depth_image: Optional[np.ndarray] = None,
                 bounding_box: bool = False,
-                tracks: Optional[list] = None) -> bool:
+                tracks: Optional[list] = None,
+                ori_image: Optional[np.ndarray] = None
+                ) -> Tuple[bool, Optional[np.ndarray]]:
+
         image = self._draw_skeleton_image(depth_image)
 
         if bounding_box:
-            for idx, bb in enumerate(self.pose_bounding_box_int):
-                tl, br = bb[0:2], bb[2:4]
-                image = cv2.rectangle(image, tl, br, (0, 255, 0), 2)
+            image = self._draw_skeleton_bounding_box_image(image)
 
         if tracks is not None:
-            for track in tracks:
-                try:
-                    # deepsort / ocsort
-                    bb = track.to_tlbr()
-                except AttributeError:
-                    # bytetrack
-                    bb = track.tlbr
-                l, t, r, b = bb
-                tl = (np.floor(l).astype(int), np.floor(t).astype(int))
-                br = (np.ceil(r).astype(int), np.ceil(b).astype(int))
-                image = cv2.rectangle(image, tl, br, (0, 0, 255), 2)
-                cv2.putText(image,
-                            f"ID : {track.track_id}",
-                            tl,
-                            cv2.FONT_HERSHEY_PLAIN,
-                            2,
-                            (0, 255, 0),
-                            2,
-                            cv2.LINE_AA)
+            image = self._draw_bounding_box_tracking_image(image, tracks)
 
         image = cv2.resize(image, (int(image.shape[1]*scale),
                                    int(image.shape[0]*scale)))
+
+        if ori_image is not None:
+            _image = cv2.resize(ori_image, (int(ori_image.shape[1]*scale),
+                                            int(ori_image.shape[0]*scale)))
+            # cv2.imshow(str(device_sn)+"_ori", _image)
+            image = np.concatenate([_image, image], axis=0)
 
         # overlay = cv2.resize(overlay, (800, 450))
         if depth_image is None:
@@ -345,9 +361,9 @@ class PyOpenPoseNative:
         if key & 0xFF == ord('q') or key == 27:
             cv2.destroyAllWindows()
             cv2.waitKey(5)
-            return True
+            return False, image
         else:
-            return False
+            return True, image
 
     def save_skeleton_image(self,
                             save_path: str,
@@ -420,16 +436,15 @@ class OpenPosePoseExtractor:
                 scale: int = 1.0,
                 image: Optional[np.ndarray] = None,
                 bounding_box: bool = False,
-                tracks=None):
+                tracks: list = None) -> Tuple[bool, Optional[np.ndarray]]:
         if self.pyop.datum.poseScores is None:
             cv2.imshow(str(dev), image)
             cv2.waitKey(speed)
+            return image
         else:
-            _image = cv2.resize(image, (int(image.shape[1]*scale),
-                                        int(image.shape[0]*scale)))
-            cv2.imshow(str(dev)+"_ori", _image)
-            self.pyop.display(str(dev),
-                              scale=scale,
-                              speed=speed,
-                              bounding_box=bounding_box,
-                              tracks=tracks)
+            return self.pyop.display(str(dev),
+                                     scale=scale,
+                                     speed=speed,
+                                     bounding_box=bounding_box,
+                                     tracks=tracks,
+                                     ori_image=image)

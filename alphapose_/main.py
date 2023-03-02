@@ -11,21 +11,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from submodules.AlphaPose.detector.apis import get_detector
-from submodules.AlphaPose.trackers.tracker_api import Tracker
-from submodules.AlphaPose.trackers.tracker_cfg import cfg as tcfg
-from submodules.AlphaPose.trackers import track
-from submodules.AlphaPose.alphapose.models import builder
-from submodules.AlphaPose.alphapose.utils.config import update_config
-from submodules.AlphaPose.alphapose.utils.detector import DetectionLoader
-from submodules.AlphaPose.alphapose.utils.file_detector import FileDetectionLoader  # noqa
-from submodules.AlphaPose.alphapose.utils.transforms import flip, flip_heatmap
-from submodules.AlphaPose.alphapose.utils.vis import getTime
-from submodules.AlphaPose.alphapose.utils.webcam_detector import WebCamDetectionLoader  # noqa
-from submodules.AlphaPose.alphapose.utils.writer import DataWriter
-
 from alphapose_.skeleton import AlphaPosePoseExtractor
-from alphapose_.utils import check_input
 from alphapose_.utils import loop
 from alphapose_.utils import print_finish_info
 
@@ -72,11 +58,10 @@ if __name__ == "__main__":
         im_names_desc = tqdm(range(data_len), dynamic_ncols=True)
 
     # 8. Main loop
-    batchSize = args.posebatch
-    if args.flip:
-        batchSize = int(batchSize / 2)
     try:
         for i in im_names_desc:
+            if i == 15:
+                PE.runtime_profile = {'dt': [],   'pt': [], 'pn': []}
             with torch.no_grad():
                 PE.predict()
             if args.profile:

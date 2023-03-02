@@ -89,3 +89,24 @@ def resize_tensor(image: np.ndarray, x: int, y: int) -> np.ndarray:
             newImage[i + 1, j + 1] = image[1 + int(i / yScale),
                                            1 + int(j / xScale)]
     return newImage
+
+
+def get_color(idx):
+    idx = idx * 3
+    color = ((37 * idx) % 255, (17 * idx) % 255, (29 * idx) % 255)
+    return color
+
+
+def get_color_fast(idx):
+    RED = (0, 0, 255)
+    GREEN = (0, 255, 0)
+    BLUE = (255, 0, 0)
+    CYAN = (255, 255, 0)
+    YELLOW = (0, 255, 255)
+    ORANGE = (0, 165, 255)
+    PURPLE = (255, 0, 255)
+    WHITE = (255, 255, 255)
+    BLACK = (0, 0, 0)
+    color_pool = [RED, GREEN, BLUE, CYAN, YELLOW, ORANGE, PURPLE, WHITE]
+    color = color_pool[idx % 8]
+    return color
