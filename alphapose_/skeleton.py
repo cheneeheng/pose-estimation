@@ -28,7 +28,7 @@ class AlphaPosePoseExtractor:
     def __init__(self, args: argparse.Namespace) -> None:
         cfg = update_config(args.cfg)
         print(f"Building pose model: {cfg.MODEL.TYPE}")
-        print(f"Loading pose mpdel checkpoint: {args.checkpoint}")
+        print(f"Loading pose model checkpoint: {args.checkpoint}")
         self.args = args
         self.cfg = cfg
         self.dataset = retrieve_dataset(cfg.DATASET.TRAIN)
@@ -42,6 +42,9 @@ class AlphaPosePoseExtractor:
         self.input_source = None  # str
         self.writer = None
         if self.args.pose_track:
+            print(f"Building pose track model")
+            print(f"Loading pose track checkpoint: {tcfg.loadmodel}")
+            tcfg.loadmodel = args.pose_track_model
             self.tracker = Tracker(tcfg, args)
         self._build_pose_model()
         self._build_detection_loader()

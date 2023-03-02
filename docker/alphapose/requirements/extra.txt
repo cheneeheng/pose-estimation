@@ -7,4 +7,4 @@ natsort
 easydict
 cython_bbox
 pyyaml
-pycocotools
+# pycocotools
