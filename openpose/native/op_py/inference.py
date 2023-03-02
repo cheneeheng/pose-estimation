@@ -86,33 +86,6 @@ def rs_online_inference(args: argparse.Namespace,
                   f"skipping {color_filepath}")
             return False
 
-    # except Exception as e:
-    #     print(e)
-    #     print("Stacked data detected")
-    #     print(f"Current image shape : {image.shape}")
-
-    #     try:
-    #         image = image.reshape(img_h, img_w*3, 3)
-    #     except Exception as e:
-    #         print(e)
-    #         return
-
-    #     data_tuples = []
-    #     for i in range(3):
-    #         _dir = skel_dir.replace(dev_list[0], dev_list[i])
-    #         _path = skel_file.split('.')[0]
-    #         _path = _path.split('_')[i]
-    #         skel_filepath = os.path.join(_dir, _path + '.csv')
-    #         save_path_list = prepare_save_paths(
-    #             skel_filepath,
-    #             args.op_rs_save_skel,
-    #             args.op_rs_save_skel_image,
-    #             args.op_rs_save_3d_skel)
-    #         j = args.op_rs_image_width * i
-    #         k = args.op_rs_image_width * (i+1)
-    #         img = image[:, j:k, :]
-    #         data_tuples.append([img] + save_path_list)
-
     with Timer("infer", enable_timer):
 
         # 3. infer images

@@ -1,6 +1,6 @@
-
 import os
 import natsort
+import time
 
 
 def loop():
@@ -22,8 +22,7 @@ def check_input(args):
             videofile = args.video
             return 'video', videofile
         else:
-            raise IOError(
-                'Error: --video must refer to a video file, not directory.')
+            raise IOError('Error: --video must refer to a video file, not directory.')  # noqa
 
     # for detection results
     if len(args.detfile):
@@ -31,8 +30,7 @@ def check_input(args):
             detfile = args.detfile
             return 'detfile', detfile
         else:
-            raise IOError(
-                'Error: --detfile must refer to a detection json file, not directory.')
+            raise IOError('Error: --detfile must refer to a detection json file, not directory.')  # noqa
 
     # for images
     if len(args.inputpath) or len(args.inputlist) or len(args.inputimg):
@@ -59,5 +57,5 @@ def check_input(args):
 def print_finish_info(args):
     print('===========================> Finish Model Running.')
     if (args.save_img or args.save_video) and not args.vis_fast:
-        print('===========================> Rendering remaining images in the queue...')
-        print('===========================> If this step takes too long, you can enable the --vis_fast flag to use fast rendering (real-time).')
+        print('===========================> Rendering remaining images in the queue...')  # noqa
+        print('===========================> If this step takes too long, you can enable the --vis_fast flag to use fast rendering (real-time).')  # noqa
