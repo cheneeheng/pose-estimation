@@ -3,7 +3,7 @@ import numpy as np
 from typing import Optional, Tuple
 
 from .utils import resize_tensor
-from submodules.deep_sort.deep_sort.detection import Detection
+from submodules.StrongSORT.deep_sort.detection import Detection
 
 
 # Tracking inspired by : https://github.com/ortegatron/liveposetracker

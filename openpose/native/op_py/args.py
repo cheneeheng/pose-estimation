@@ -116,7 +116,7 @@ def get_parser() -> argparse.ArgumentParser:
                    help='If true performs OC Sort tracking.')
     p.add_argument('--op-track-strongsort',
                    type=str2bool,
-                   default=True,
+                   default=False,
                    help='If true performs StrongSort tracking.')
     p.add_argument('--op-track-buffer',
                    type=int,
