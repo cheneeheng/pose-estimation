@@ -3,6 +3,7 @@ import cv2
 import os
 import numpy as np
 import time
+from tqdm import tqdm
 
 from typing import Optional, Union
 
@@ -46,7 +47,7 @@ def inference(args: argparse.Namespace,
     """
     assert color_src is not None
 
-    with Timer(f"data preparation", enable_timer):
+    with Timer(f"data preparation", enable_timer, printout=enable_timer):
 
         # 1. get the color image
         if isinstance(color_src, str):
@@ -74,7 +75,7 @@ def inference(args: argparse.Namespace,
                 print(f"skipping {color_src}")
             return (False, None, None)
 
-    with Timer("infer", enable_timer):
+    with Timer("infer", enable_timer, printout=enable_timer):
 
         # 3. infer images
         try:
@@ -95,7 +96,7 @@ def rs_inference(args: argparse.Namespace,
                  depth_src: Optional[Union[np.ndarray, str]] = None,
                  skeleton_filepath: Optional[str] = None,
                  enable_timer: bool = False,
-                 profile: bool = False) -> bool:
+                 printout_timer: bool = False) -> bool:
     """Extract pose using openpose per realsense image.
 
     Args:
@@ -115,7 +116,7 @@ def rs_inference(args: argparse.Namespace,
 
     assert color_src is not None
 
-    with Timer(f"data preparation", enable_timer):
+    with Timer(f"data preparation", enable_timer, printout_timer) as t1:
 
         # 1. get the color image
         if isinstance(color_src, str):
@@ -124,7 +125,9 @@ def rs_inference(args: argparse.Namespace,
             except Exception as e:
                 print(e)
                 print(f"[WARN] : Error loading data, skipping {color_src}")
-                return False, None
+                return {'status': False,
+                        'data_prep_time': -1,
+                        'infer_time': -1}
         else:
             assert isinstance(color_src, np.ndarray)
             image = color_src
@@ -138,7 +141,9 @@ def rs_inference(args: argparse.Namespace,
                 except Exception as e:
                     print(e)
                     print(f"[WARN] : Error loading data, skipping {depth_src}")
-                    return False, None
+                    return {'status': False,
+                            'data_prep_time': -1,
+                            'infer_time': -1}
             else:
                 assert isinstance(depth_src, np.ndarray)
                 depth = depth_src
@@ -158,9 +163,11 @@ def rs_inference(args: argparse.Namespace,
             print(f"[WARN] : Error in reshaping image...")
             if isinstance(color_src, str):
                 print(f"skipping {color_src}")
-            return False, None
+            return {'status': False,
+                    'data_prep_time': -1,
+                    'infer_time': -1}
 
-    with Timer("infer", enable_timer):
+    with Timer("infer", enable_timer, printout_timer) as t2:
 
         # 3. infer images
         try:
@@ -177,24 +184,25 @@ def rs_inference(args: argparse.Namespace,
                                               kpt_3d_save_path,
                                               skel_image_save_path)
                 else:
-                    if profile:
-                        s = time.time()
                     pose_extractor.predict(image,
                                            kpt_save_path,
                                            skel_image_save_path)
-                    if profile:
-                        prof += time.time()-s
-            return True, prof
 
         except Exception as e:
             print(e)
             print(f"[WARN] : Error in pose extraction...")
             if isinstance(color_src, str):
                 print(f"skipping {color_src}")
-            return False, None
+            return {'status': False,
+                    'data_prep_time': -1,
+                    'infer_time': -1}
+
+    return {'status': False,
+            'data_prep_time': t1.duration,
+            'infer_time': t2.duration}
 
 
-def rs_offline_inference(args: argparse.Namespace, profile: bool = False):
+def rs_offline_inference(args: argparse.Namespace):
     """Runs openpose inference and tracking on realsense camera in offline mode.
 
     Reads realsense image files under the `base_path` arg and extracts pose
@@ -216,14 +224,14 @@ def rs_offline_inference(args: argparse.Namespace, profile: bool = False):
     delay_switch = 1
     delay_counter = 0
 
-    display_scale = 0.5
     display_speed = 1
 
     runtime = {'PE': [], 'TK': []}
 
     c = 30
 
-    enable_time = True
+    enable_timer = True
+    printout_timer = False
 
     PE = OpenPosePoseExtractor(args)
 
@@ -266,15 +274,17 @@ def rs_offline_inference(args: argparse.Namespace, profile: bool = False):
         for dev, color_filepaths in filepath_dict.items():
 
             _c = 0
+            tqdm_bar = tqdm(color_filepaths, dynamic_ncols=True)
 
             # 5. loop through filepaths of color image
-            for color_filepath in color_filepaths:
+            for idx, color_filepath in enumerate(tqdm_bar):
+
+                if idx == 15:
+                    runtime = {'PE': [], 'TK': []}
 
                 # if _c < 480:
                 #     _c += 1
                 #     continue
-
-                print(f"[INFO] : {color_filepath}")
 
                 depth_filepath = color_filepath.replace('color', 'depth')
                 skel_filepath = color_filepath.replace('color', 'skeleton')
@@ -289,7 +299,7 @@ def rs_offline_inference(args: argparse.Namespace, profile: bool = False):
                         TK.no_measurement_predict_and_update()
                         PE.display(dev=dev,
                                    speed=display_speed,
-                                   scale=display_scale,
+                                   scale=args.op_display,
                                    image=_image,
                                    bounding_box=True,
                                    tracks=TK.tracker.tracks)
@@ -298,52 +308,60 @@ def rs_offline_inference(args: argparse.Namespace, profile: bool = False):
                         delay_counter = delay_switch
 
                 # 4. read and infer pose
-                status = rs_inference(args,
-                                      PE,
-                                      color_filepath,
-                                      depth_filepath,
-                                      skel_filepath,
-                                      enable_time,
-                                      profile)
-                runtime['PE'].append(1/status[1])
+                infer_out = rs_inference(args,
+                                         PE,
+                                         color_filepath,
+                                         depth_filepath,
+                                         skel_filepath,
+                                         enable_timer,
+                                         printout_timer)
+                runtime['PE'].append(1/infer_out['infer_time'])
 
                 s = time.time()
                 if TK is not None:
                     if TK.name == 'deep_sort' or TK.name == 'strong_sort':
-                        with Timer("update", enable_time):
+                        with Timer("update", enable_timer, printout_timer) as t:
                             TK.update(PE.pyop,
                                       (args.op_rs_image_width,
                                        args.op_rs_image_height))
                     elif TK.name == 'byte_tracker' or TK.name == 'oc_sort':
-                        with Timer("update", enable_time):
+                        with Timer("update", enable_timer, printout_timer) as t:
                             TK.update(PE.pyop)
                 runtime['TK'].append(1/(time.time()-s))
 
                 # status = PE.display(dev=dev,
                 #                     speed=display_speed,
-                #                     scale=display_scale,
+                #                     scale=args.op_display,
                 #                     image=_image,
                 #                     bounding_box=False,
                 #                     tracks=TK.tracks)
 
                 img = PE.pyop.opencv_image
-                img = PE.pyop._draw_skeleton_bounding_box_image(img)
+                # img = PE.pyop._draw_skeleton_bounding_box_image(img)
                 img = PE.pyop._draw_bounding_box_tracking_image(img, TK.tracks)
-                img = cv2.resize(img, (int(img.shape[1]*display_scale),
-                                       int(img.shape[0]*display_scale)))
-                _img = cv2.resize(_image, (int(_image.shape[1]*display_scale),
-                                           int(_image.shape[0]*display_scale)))
-                img = np.concatenate([img, _img], axis=0)
+                img = cv2.resize(img,
+                                 (int(img.shape[1]*args.op_display),
+                                  int(img.shape[0]*args.op_display)))
+                # _img = cv2.resize(_image,
+                #                   (int(_image.shape[1]*args.op_display),
+                #                    int(_image.shape[0]*args.op_display)))
+                # img = np.concatenate([img, _img], axis=0)
                 save_file = color_filepath.replace('color',
                                                    f'color_{TK.name}')
                 os.makedirs(os.path.dirname(save_file), exist_ok=True)
-                if status[0] and save_file is not None:
+                if infer_out['status'] and save_file is not None:
                     cv2.imwrite(save_file, img)
 
-                print(f"Number of tracks : {len(TK.tracks)}")
-                if profile:
-                    print(f"FPS PE : {sum(runtime['PE'])/len(runtime['PE'])}")
-                    print(f"FPS TK : {sum(runtime['TK'])/len(runtime['TK'])}")
+                tqdm_bar.set_description(
+                    f"Image : {color_filepath.split('/')[-1]} | "
+                    f"#Skel filtered : {PE.pyop.filtered_skel} | "
+                    f"#Tracks : {len(TK.tracks)} | "
+                    f"Prep time : {infer_out['data_prep_time']:.3f} | "
+                    f"Pose time : {infer_out['infer_time']:.3f} | "  # noqa
+                    f"Track time : {t.duration:.3f} | "
+                    f"A-FPS PE : {sum(runtime['PE'])/len(runtime['PE']):.3f} | "  # noqa
+                    f"A-FPS TK : {sum(runtime['PE'])/len(runtime['PE']):.3f}"
+                )
 
                 # if args.op_rs_delete_image:
                 #     os.remove(color_filepath)
@@ -356,21 +374,18 @@ if __name__ == "__main__":
     [arg_op, _] = get_parser().parse_known_args()
     print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_deepsort")
     arg_op.op_track_deepsort = True
-    rs_offline_inference(arg_op, profile=True)
+    rs_offline_inference(arg_op)
     arg_op.op_track_deepsort = False
-    [arg_op, _] = get_parser().parse_known_args()
     print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_bytetrack")
     arg_op.op_track_bytetrack = True
-    rs_offline_inference(arg_op, profile=True)
+    rs_offline_inference(arg_op)
     arg_op.op_track_bytetrack = False
-    [arg_op, _] = get_parser().parse_known_args()
     print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_ocsort")
     arg_op.op_track_ocsort = True
-    rs_offline_inference(arg_op, profile=True)
+    rs_offline_inference(arg_op)
     arg_op.op_track_ocsort = False
-    [arg_op, _] = get_parser().parse_known_args()
     print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_strongsort")
     arg_op.op_track_strongsort = True
-    rs_offline_inference(arg_op, profile=True)
+    rs_offline_inference(arg_op)
     arg_op.op_track_strongsort = False
     print(f"[INFO] : FINISHED")

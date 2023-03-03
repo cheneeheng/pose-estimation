@@ -100,6 +100,7 @@ class PyOpenPoseNative:
         self._pose_keypoints_3d = None
         self._pose_bounding_box = None
         self._pose_bounding_box_int = None
+        self.filtered_skel = "0"
         self.reset()
 
         # for 3d skel
@@ -178,6 +179,7 @@ class PyOpenPoseNative:
         self._pose_keypoints_3d = None
         self._pose_bounding_box = None
         self._pose_bounding_box_int = None
+        self.filtered_skel = "0"
         return
 
     def configure(self, params: dict = None) -> None:
@@ -224,7 +226,8 @@ class PyOpenPoseNative:
                 # [M]
                 self._pose_scores = np.stack(scores_filtered, axis=0)
 
-            print(f"Skeletons filtered: {len(keypoints_filtered)}/{len(max_score_idxs)}")  # noqa
+            self.filtered_skel = f"{len(keypoints_filtered)}/{len(max_score_idxs)}"  # noqa
+            # print(f"Skeletons filtered: {len(keypoints_filtered)}/{len(max_score_idxs)}")  # noqa
 
         return
 

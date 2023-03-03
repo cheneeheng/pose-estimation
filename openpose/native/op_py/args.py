@@ -55,8 +55,8 @@ def get_parser() -> argparse.ArgumentParser:
 
     # DISPLAY OPTIONS ----------------------------------------------------------
     p.add_argument('--op-display',
-                   type=int,
-                   default=0,
+                   type=float,
+                   default=1.0,
                    help='scale for displaying skel images.')
     p.add_argument('--op-display-depth',
                    type=int,

@@ -5,21 +5,32 @@ import numpy as np
 
 
 class Timer:
-    def __init__(self, text: str = '', enable: bool = True) -> None:
+    def __init__(self,
+                 text: str = '',
+                 enable: bool = True,
+                 printout: bool = False) -> None:
         self._t_start = None
+        self._duration = None
         self._text = text
         self._enable = enable
+        self._printout = printout
+
+    @property
+    def duration(self):
+        return self._duration
 
     def __enter__(self) -> None:
         if self._enable:
             self._t_start = time.time()
+        return self
 
     def __exit__(self, *args) -> None:
         if self._enable:
-            _duration = time.time() - self._t_start
-            print(f"[INFO] : Timer >>> "
-                  f"{self._text: <40} >>> "
-                  f"{_duration:.6f} s")
+            self._duration = time.time() - self._t_start
+            if self._printout:
+                print(f"[INFO] : Timer >>> "
+                      f"{self._text: <40} >>> "
+                      f"{self._duration:.6f} s")
 
 
 class Error:
