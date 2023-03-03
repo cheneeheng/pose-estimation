@@ -3,13 +3,12 @@ ARG BASE_IMAGE=ubuntu:20.04
 FROM ${BASE_IMAGE}
 
 ENV LANG en_US.UTF-8
-
 ENV DEBIAN_FRONTEND=noninteractive
-
 ENV TZ=Europe/Berlin
 
 # ------------------------------------------------------------------------------
 # Main apts 
+# ------------------------------------------------------------------------------
 RUN rm -rf /var/lib/apt/lists/* \
     && apt-get update \
     && apt-get install -y --no-install-recommends \	
@@ -23,8 +22,15 @@ RUN rm -rf /var/lib/apt/lists/* \
     tzdata \
     ssh
 
+RUN wget https://github.com/Kitware/CMake/releases/download/v3.25.3/cmake-3.25.3-Linux-x86_64.tar.gz && \
+    tar xzf cmake-3.25.3-Linux-x86_64.tar.gz -C /opt && \
+    rm cmake-3.25.3-Linux-x86_64.tar.gz && \
+    ln -s /opt/cmake-3.25.3-linux-x86_64/bin/cmake /usr/local/bin/ && \
+    ln -s /opt/cmake-3.25.3-linux-x86_64/bin/ccmake /usr/local/bin/
+
 # ------------------------------------------------------------------------------
 # Python 3.8
+# ------------------------------------------------------------------------------
 RUN apt-get install -y python3.8 python3.8-dev && \
     ln -s /usr/bin/python3.8 /usr/bin/python && \
     ln -s /usr/bin/python3.8 /usr/bin/python3 && \
@@ -36,6 +42,8 @@ ENV PYTHONUNBUFFERED=1
 
 # ------------------------------------------------------------------------------
 # Apt libraries
+# ------------------------------------------------------------------------------
+# ffmpeg is for video generation
 RUN apt-get install -y \
     libprotobuf-dev \
     protobuf-compiler \
@@ -43,26 +51,21 @@ RUN apt-get install -y \
     libboost-all-dev \
     libhdf5-dev \
     libatlas-base-dev \
-    libopencv-dev
+    libopencv-dev \
+    ffmpeg  
 
 # ------------------------------------------------------------------------------
 # pip
-WORKDIR /tmp
-COPY ./requirements/*.txt /tmp
-RUN python3 -m pip install -r /tmp/main.txt
-RUN python3 -m pip install -r /tmp/devel.txt
-RUN python3 -m pip install -r /tmp/extra.txt
+# ------------------------------------------------------------------------------
+COPY ./requirements /tmp/requirements
+RUN python3 -m pip install -r /tmp/requirements/requirements.txt
 
 # ------------------------------------------------------------------------------
-# TAKEN FROM : https://github.com/esemeniuc/openpose-docker/blob/master/Dockerfile
+# Install openpose
+# ------------------------------------------------------------------------------
+# Based on : https://github.com/esemeniuc/openpose-docker/blob/master/Dockerfile
 # and : https://hub.docker.com/r/cwaffles/openpose
-# RUN wget https://github.com/Kitware/CMake/releases/download/v3.21.1/cmake-3.21.1-Linux-x86_64.tar.gz && \
-#     tar xzf cmake-3.21.1-Linux-x86_64.tar.gz -C /opt && \
-#     rm cmake-3.21.1-Linux-x86_64.tar.gz
-# ENV PATH="/opt/cmake-3.21.1-linux-x86_64/bin:${PATH}"
-
-WORKDIR /usr/local/src/openpose
-RUN git clone https://github.com/CMU-Perceptual-Computing-Lab/openpose.git .
+RUN git clone https://github.com/cheneeheng/openpose.git /usr/local/src/openpose
 WORKDIR /usr/local/src/openpose/build
 RUN cmake \
     -DDOWNLOAD_BODY_25_MODEL:Bool=ON \
@@ -72,15 +75,17 @@ RUN cmake \
     -DDOWNLOAD_HAND_MODEL:Bool=OFF \
     -DGPU_MODE:String=CPU_ONLY \
     -DBUILD_PYTHON=ON \
-    -DPYTHON_EXECUTABLE=$(which python3) \
-    -DPYTHON_LIBRARY="/usr/lib/x86_64-linux-gnu/libpython3.8.so" ..
-RUN make -j$(($(nproc) - 1))
+    -DPYTHON_EXECUTABLE:String="/usr/bin/python3.8" \
+    -DBUILD_EXAMPLES:Bool=OFF \
+     .. && \
+     make -j$(($(nproc) - 1))
 
-WORKDIR /usr/local/src/openpose/build/python/openpose
-RUN make install
-
-RUN cp ./pyopenpose.cpython-38-x86_64-linux-gnu.so /usr/local/lib/python3.8/dist-packages
-RUN ln -s /usr/local/lib/python3.8/dist-packages/pyopenpose.cpython-38-x86_64-linux-gnu.so /usr/local/lib/python3.8/dist-packages/pyopenpose
+RUN cd python/openpose && \
+    make && \
+    cp ./pyopenpose.cpython-38-x86_64-linux-gnu.so /usr/local/lib/python3.8/dist-packages && \
+    ln -s ./pyopenpose.cpython-38-x86_64-linux-gnu.so /usr/local/lib/python3.8/dist-packages/pyopenpose
 ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/src/openpose/build/python/openpose"
+
+RUN python3 -m pip install git+https://github.com/cheneeheng/cython_bbox.git
 
 WORKDIR /code
