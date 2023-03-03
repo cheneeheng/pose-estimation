@@ -41,7 +41,7 @@ parser.add_argument('--vis',
                     help='visualize image')
 parser.add_argument('--final_img_scale',
                     type=float,
-                    default=0.5,
+                    default=1.0,
                     help='scale of visualized/saved image')
 parser.add_argument('--showbox',
                     default=True,
