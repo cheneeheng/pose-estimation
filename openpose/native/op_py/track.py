@@ -2,8 +2,6 @@ import numpy as np
 
 from typing import Optional
 
-from .skeleton import PyOpenPoseNative
-from .utils import Timer
 from .utils_track import create_detections
 
 from submodules.ByteTrack.yolox.tracker.byte_tracker import BYTETracker
@@ -153,31 +151,35 @@ class Tracker():
         self.tracker.predict()
 
     def update(self,
-               pyop: PyOpenPoseNative,
+               boxes: np.ndarray,
+               scores: np.ndarray,
+               keypoints: np.ndarray,
+               heatmaps: np.ndarray,
                image_size: Optional[tuple] = None):
         if self.name == 'deep_sort' or self.name == 'strong_sort':
             self.predict()
-            self.detections = self._create_detections(pyop, image_size)
+            self.detections = self._create_detections(
+                boxes, scores, keypoints, heatmaps, image_size)
             self.tracker.update(self.detections)
         elif self.name == 'byte_tracker' or self.name == 'oc_sort':
-            self.detections = self._create_detections_np(pyop)
+            self.detections = self._create_detections_np(boxes, scores)
             self.tracker.update(self.detections)
 
     @staticmethod
-    def _create_detections(pyop: PyOpenPoseNative, image_size: tuple):
-        heatmaps = pyop.pose_heatmaps.copy()
-        keypoints = pyop.pose_keypoints.copy()
-        boxes = pyop.pose_bounding_box.copy()
-        scores = pyop.pose_scores.copy()
+    def _create_detections(boxes: np.ndarray,
+                           scores: np.ndarray,
+                           keypoints: np.ndarray,
+                           heatmaps: np.ndarray,
+                           image_size: tuple):
         s_h = heatmaps.shape[0]/image_size[1]
         s_w = heatmaps.shape[1]/image_size[0]
         return create_detections(
             keypoints, scores, boxes, heatmaps, [s_w, s_h])
 
     @staticmethod
-    def _create_detections_np(pyop: PyOpenPoseNative):
-        boxes = pyop.pose_bounding_box.copy()
-        scores = np.expand_dims(pyop.pose_scores.copy(), 1)
+    def _create_detections_np(boxes: np.ndarray,
+                              scores: np.ndarray,):
+        scores = np.expand_dims(scores, 1)
         return np.concatenate([boxes, scores], axis=1)
 
     def no_measurement_predict_and_update(self):

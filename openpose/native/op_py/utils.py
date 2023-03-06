@@ -92,8 +92,8 @@ def cosine_distance(a: np.ndarray,
 # https://www.geeksforgeeks.org/image-processing-without-opencv-python/
 def resize_tensor(image: np.ndarray, x: int, y: int) -> np.ndarray:
     h, w, c = image.shape
-    xScale = x/(w-1)
-    yScale = y/(h-1)
+    xScale = x/max((w-1), 1)
+    yScale = y/max((h-1), 1)
     newImage = np.zeros([y, x, c])
     for i in range(y-1):
         for j in range(x-1):

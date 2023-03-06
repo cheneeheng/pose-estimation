@@ -94,6 +94,7 @@ class PyOpenPoseNative:
         self.datum = op.Datum()
 
         # results
+        self._pose_empty = False
         self._pose_scores = None
         self._pose_heatmaps = None
         self._pose_keypoints = None
@@ -146,6 +147,8 @@ class PyOpenPoseNative:
 
     @property
     def pose_bounding_box(self) -> np.ndarray:
+        if self._pose_empty:
+            return None
         if self._pose_bounding_box is None:
             bb = []
             for pose_keypoints in self.pose_keypoints:
@@ -162,17 +165,25 @@ class PyOpenPoseNative:
 
     @property
     def pose_bounding_box_int(self) -> np.ndarray:
+        if self._pose_empty:
+            return None
         if self._pose_bounding_box_int is None:
             _bb = self.pose_bounding_box
-            u_min = np.floor(_bb[:, 0]).astype(int)
-            v_min = np.floor(_bb[:, 1]).astype(int)
-            u_max = np.ceil(_bb[:, 2]).astype(int)
-            v_max = np.ceil(_bb[:, 3]).astype(int)
-            self._pose_bounding_box_int = np.stack(
-                [u_min, v_min, u_max, v_max], axis=1)
+            if _bb is not None:
+                u_min = np.floor(_bb[:, 0]).astype(int)
+                v_min = np.floor(_bb[:, 1]).astype(int)
+                u_max = np.ceil(_bb[:, 2]).astype(int)
+                v_max = np.ceil(_bb[:, 3]).astype(int)
+                self._pose_bounding_box_int = np.stack(
+                    [u_min, v_min, u_max, v_max], axis=1)
         return self._pose_bounding_box_int
 
+    @property
+    def pose_empty(self):
+        return self._pose_empty
+
     def reset(self) -> None:
+        self._pose_empty = False
         self._pose_scores = None
         self._pose_heatmaps = None
         self._pose_keypoints = None
@@ -196,16 +207,18 @@ class PyOpenPoseNative:
         self.reset()
         self.datum.cvInputData = image
         self.opWrapper.emplaceAndPop(op.VectorDatum([self.datum]))
+        if self.datum.poseScores is None:
+            self._pose_empty = True
         return
 
     def filter_prediction(self) -> None:
-        scores = self.pose_scores
         # 1. Empty array if scores is None (no skeleton at all)
-        if scores is None:
-            print("No skeleton detected...")
-            self.reset()
+        if self.pose_empty:
+            # print("No skeleton detected...")
+            pass
         # 2. Else pick pose based on prediction scores
         else:
+            scores = self.pose_scores
             scores_filtered = []
             keypoints_filtered = []
             max_score_idxs = np.argsort(scores)[-self.max_true_body:]
@@ -236,7 +249,7 @@ class PyOpenPoseNative:
                       intr_mat: Union[list, np.ndarray],
                       depth_scale: float = 1e-3,
                       ) -> None:
-        if self.pose_keypoints is None:
+        if self.pose_empty:
             print("No skeleton detected...")
             pass
         else:
@@ -270,54 +283,66 @@ class PyOpenPoseNative:
                          save_path=save_path)
         return
 
-    def _draw_skeleton_image(self, image: Optional[np.ndarray] = None) -> np.ndarray:  # noqa
-        keypoint_image = self.opencv_image
+    @staticmethod
+    def _draw_skeleton_image(image: Optional[np.ndarray] = None,
+                             depth: Optional[np.ndarray] = None,
+                             score: float = -1) -> np.ndarray:
+        # keypoint_image = self.opencv_image
         # keypoint_image = cv2.flip(keypoint_image, 1)
-        cv2.putText(keypoint_image,
-                    "KP (%) : " + str(round(np.mean(self.pose_scores), 2)),
+        cv2.putText(image,
+                    "KP (%) : " + str(round(score, 2)),
                     (10, 50),
                     cv2.FONT_HERSHEY_PLAIN,
                     2,
                     (255, 0, 0),
                     2,
                     cv2.LINE_AA)
-        if image is not None:
+        if depth is not None:
             colormap = cv2.applyColorMap(
-                cv2.convertScaleAbs(image, alpha=0.065, beta=0),
+                cv2.convertScaleAbs(depth, alpha=0.065, beta=0),
                 cv2.COLORMAP_INFERNO
             )
             # colormap = cv2.flip(colormap, 1)
-            keypoint_image = cv2.addWeighted(
-                keypoint_image, 0.7, colormap, 0.7, 0)
+            image = cv2.addWeighted(
+                image, 0.7, colormap, 0.7, 0)
             # overlay = cv2.resize(overlay, (800, 450))
-        return keypoint_image
-
-    def _draw_skeleton_bounding_box_image(self, image: np.ndarray) -> np.ndarray:  # noqa
-        for idx, bb in enumerate(self.pose_bounding_box_int):
-            tl, br = bb[0:2], bb[2:4]
-            image = cv2.rectangle(image, tl, br, (0, 255, 0), 2)
         return image
 
-    def _draw_bounding_box_tracking_image(self, image: np.ndarray, tracks: Optional[list] = None) -> np.ndarray:  # noqa
-        for track in tracks:
-            try:
-                # deepsort / ocsort
-                bb = track.to_tlbr()
-            except AttributeError:
-                # bytetrack
-                bb = track.tlbr
-            l, t, r, b = bb
-            tl = (np.floor(l).astype(int), np.floor(t).astype(int))
-            br = (np.ceil(r).astype(int), np.ceil(b).astype(int))
-            image = cv2.rectangle(image, tl, br, get_color(track.track_id), 1)
-            cv2.putText(image,
-                        f"ID : {track.track_id}",
-                        tl,
-                        cv2.FONT_HERSHEY_PLAIN,
-                        2,
-                        get_color(track.track_id),
-                        2,
-                        cv2.LINE_AA)
+    @staticmethod
+    def _draw_skeleton_bounding_box_image(
+            image: np.ndarray,
+            boxes: Optional[np.ndarray]) -> np.ndarray:
+        if boxes is not None:
+            for idx, bb in enumerate(boxes):
+                tl, br = bb[0:2], bb[2:4]
+                image = cv2.rectangle(image, tl, br, (0, 255, 0), 2)
+        return image
+
+    @staticmethod
+    def _draw_bounding_box_tracking_image(
+            image: np.ndarray,
+            tracks: Optional[list] = None) -> np.ndarray:
+        if tracks is not None:
+            for track in tracks:
+                try:
+                    # deepsort / ocsort
+                    bb = track.to_tlbr()
+                except AttributeError:
+                    # bytetrack
+                    bb = track.tlbr
+                l, t, r, b = bb
+                tl = (np.floor(l).astype(int), np.floor(t).astype(int))
+                br = (np.ceil(r).astype(int), np.ceil(b).astype(int))
+                image = cv2.rectangle(image, tl, br,
+                                      get_color(track.track_id), 1)
+                cv2.putText(image,
+                            f"ID : {track.track_id}",
+                            tl,
+                            cv2.FONT_HERSHEY_PLAIN,
+                            2,
+                            get_color(track.track_id),
+                            2,
+                            cv2.LINE_AA)
         return image
 
     def display(self,
@@ -330,10 +355,15 @@ class PyOpenPoseNative:
                 ori_image: Optional[np.ndarray] = None
                 ) -> Tuple[bool, Optional[np.ndarray]]:
 
-        image = self._draw_skeleton_image(depth_image)
+        image = self.opencv_image
+
+        image = self._draw_skeleton_image(image,
+                                          depth_image,
+                                          np.mean(self.pose_scores))
 
         if bounding_box:
-            image = self._draw_skeleton_bounding_box_image(image)
+            image = self._draw_skeleton_bounding_box_image(
+                image, self.pose_bounding_box_int)
 
         if tracks is not None:
             image = self._draw_bounding_box_tracking_image(image, tracks)
@@ -372,7 +402,9 @@ class PyOpenPoseNative:
                             save_path: str,
                             scale: int = 1,
                             depth: Optional[np.ndarray] = None) -> None:
-        image = self._draw_skeleton_image(scale, depth)
+        image = self.opencv_image
+        image = self._draw_skeleton_image(image, depth,
+                                          np.mean(self.pose_scores))
         # image = cv2.flip(image, 1)
         # _path = save_path.replace('skeleton', 'skeleton_color')
         # _path = _path.split('.')[0] + '.jpg'

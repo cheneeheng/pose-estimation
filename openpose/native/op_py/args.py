@@ -42,6 +42,22 @@ def get_parser() -> argparse.ArgumentParser:
                    type=int,
                    default=1,
                    help='')
+    p.add_argument('--op-save-skel',
+                   type=str2bool,
+                   default=False,
+                   help='if true, saves the 2d skeleton.')
+    p.add_argument('--op-save-skel-image',
+                   type=str2bool,
+                   default=False,
+                   help='if true, saves the 2d skeleton image.')
+    p.add_argument('--op-color-image',
+                   type=str,
+                   default="",
+                   help='path to input color image.')
+    p.add_argument('--op-skel-file',
+                   type=str,
+                   default="skel.txt",
+                   help='file to save skeleton results.')
 
     # DEPTH OPTIONS ------------------------------------------------------------
     p.add_argument('--op-patch-offset',
@@ -66,7 +82,7 @@ def get_parser() -> argparse.ArgumentParser:
     # REALSENSE OPTIONS --------------------------------------------------------
     p.add_argument('--op-rs-dir',
                    type=str,
-                   default='openpose/data/mot17',
+                   default='data/mot17',
                    help='path to folder with saved rs data.')
     p.add_argument('--op-rs-image-width',
                    type=int,
@@ -76,14 +92,6 @@ def get_parser() -> argparse.ArgumentParser:
                    type=int,
                    default=1080,
                    help='image height in px')
-    p.add_argument('--op-rs-save-skel',
-                   type=str2bool,
-                   default=False,
-                   help='if true, saves the 2d skeleton.')
-    p.add_argument('--op-rs-save-skel-image',
-                   type=str2bool,
-                   default=False,
-                   help='if true, saves the 2d skeleton image.')
     p.add_argument('--op-rs-extract-3d-skel',
                    type=str2bool,
                    default=False,
@@ -92,10 +100,10 @@ def get_parser() -> argparse.ArgumentParser:
                    type=str2bool,
                    default=False,
                    help='if true, saves the 3d skeleton.')
-    p.add_argument('--op-rs-save-heatmaps',
-                   type=str2bool,
-                   default=False,
-                   help='if true, saves the heatmaps/output of network.')
+    # p.add_argument('--op-rs-save-heatmaps',
+    #                type=str2bool,
+    #                default=False,
+    #                help='if true, saves the heatmaps/output of network.')
     p.add_argument('--op-rs-delete-image',
                    type=str2bool,
                    default=False,
@@ -122,4 +130,15 @@ def get_parser() -> argparse.ArgumentParser:
                    type=int,
                    default=30,
                    help="the frames for keep lost tracks.")
+
+    # EXPERIMENTS OPTIONS ------------------------------------------------------
+    p.add_argument('--op-save-result-image',
+                   type=str2bool,
+                   default=True,
+                   help='If true saves tracking+pose results in image form.')
+    p.add_argument('--op-proc',
+                   type=str,
+                   default='',
+                   help='multi (mp) or single processing (sp) or none. Based on Alphapose')  # noqa
+
     return p
