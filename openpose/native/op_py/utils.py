@@ -4,6 +4,14 @@ import time
 import numpy as np
 
 
+def dict_check(x: dict):
+    c = 0
+    for _, v in x.items():
+        if v.state:
+            c += 1
+    return True if c == len(x) else False
+
+
 class Timer:
     def __init__(self,
                  text: str = '',

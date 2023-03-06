@@ -167,11 +167,11 @@ class AlphaPosePoseExtractor:
                 self.tracker, self.args, orig_img, inps,
                 boxes, hm, cropped_boxes, im_name, scores)
 
-        hm = hm.cpu()
-        self.save(boxes, scores, ids, hm, cropped_boxes, orig_img, im_name)
-
         if self.args.profile:
             ckpt_time, post_time = getTime(ckpt_time)
             self.runtime_profile['pn'].append(post_time)
+
+        hm = hm.cpu()
+        self.save(boxes, scores, ids, hm, cropped_boxes, orig_img, im_name)
 
         return 1

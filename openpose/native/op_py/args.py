@@ -53,7 +53,7 @@ def get_parser() -> argparse.ArgumentParser:
     p.add_argument('--op-color-image',
                    type=str,
                    default="",
-                   help='path to input color image.')
+                   help='path to input color image/folder.')
     p.add_argument('--op-skel-file',
                    type=str,
                    default="skel.txt",
@@ -138,7 +138,7 @@ def get_parser() -> argparse.ArgumentParser:
                    help='If true saves tracking+pose results in image form.')
     p.add_argument('--op-proc',
                    type=str,
-                   default='',
+                   default='sp',
                    help='multi (mp) or single processing (sp) or none. Based on Alphapose')  # noqa
 
     return p

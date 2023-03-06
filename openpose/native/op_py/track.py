@@ -1,3 +1,4 @@
+import argparse
 import numpy as np
 
 from typing import Optional
@@ -45,7 +46,7 @@ class ByteTrackerArgs:
 
 class OCSortArgs:
     def __init__(self) -> None:
-        self.det_thresh = 0.5
+        self.det_thresh = 0.5  # 0.5
         self.max_age = 30
         self.min_hits = 3
         self.iou_threshold = 0.3
@@ -54,7 +55,7 @@ class OCSortArgs:
         self.asso_func = "iou"
         # momentum value
         self.inertia = 0.2
-        self.use_byte = False
+        self.use_byte = True
 
 
 class StrongSortTrackerArgs:
@@ -98,7 +99,10 @@ class StrongSortTrackerArgs:
 # Tracking inspired by : https://github.com/ortegatron/liveposetracker
 class Tracker():
 
-    def __init__(self, mode: str = 'deep_sort', max_age: int = 30) -> None:
+    def __init__(self,
+                 mode: str = 'deep_sort',
+                 input_args: argparse.Namespace = None,
+                 max_age: int = 30) -> None:
         """Intializes the tracker class.
 
         Args:

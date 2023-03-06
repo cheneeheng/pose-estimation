@@ -9,9 +9,11 @@ import multiprocessing as mp
 from typing import Optional, Union
 
 from openpose.native.op_py.args import get_parser
-from openpose.native.op_py.skeleton import PyOpenPoseNative
+from openpose.native.op_py.inference import extract_2dskeletons
+from openpose.native.op_py.skeleton import PyOpenPoseNative as PYOP
 from openpose.native.op_py.skeleton import OpenPosePoseExtractor
 from openpose.native.op_py.track import Tracker
+from openpose.native.op_py.utils import dict_check
 from openpose.native.op_py.utils import Error
 from openpose.native.op_py.utils import Timer
 from openpose.native.op_py.utils_rs import get_rs_sensor_dir
@@ -21,126 +23,7 @@ from openpose.native.op_py.utils_rs import read_depth_file
 from openpose.native.op_py.utils_rs import prepare_save_paths
 
 
-def _dict_check(x: dict):
-    c = 0
-    for _, v in x.items():
-        if v.state:
-            c += 1
-    return True if c == len(x) else False
-
-
-def rs_extract_skeletons(args: argparse.Namespace,
-                         pose_extractor: OpenPosePoseExtractor,
-                         color_src: Union[np.ndarray, str],
-                         depth_src: Optional[Union[np.ndarray, str]] = None,
-                         skeleton_filepath: Optional[str] = None,
-                         enable_timer: bool = False,
-                         printout_timer: bool = False) -> bool:
-    """Extract pose using openpose per realsense image.
-
-    Args:
-        args (argparse.Namespace): inputs args.
-        pose_extractor (OpenPosePoseExtractor): Openpose wrapper class.
-        color_src (Union[np.ndarray, str]): rgb image or path to rgb image.
-        depth_src (Optional[Union[np.ndarray, str]], optional): depth image or
-            path to depth image. If None, the depth data will not be used.
-            Defaults to None.
-        skeleton_filepath (Optional[str], optional): path to skeleton csv.
-            If None, the extracted pose will not be saved. Defaults to None.
-        enable_timer (bool): If true printout timing. Defaults to False.
-
-    Returns:
-        bool: False if error, else True
-    """
-
-    assert color_src is not None
-
-    with Timer(f"data preparation", enable_timer, printout_timer) as t1:
-
-        # 1. get the color image
-        if isinstance(color_src, str):
-            try:
-                image = read_color_file(color_src)
-            except Exception as e:
-                print(e)
-                print(f"[WARN] : Error loading data, skipping {color_src}")
-                return {'status': False,
-                        'data_prep_time': -1,
-                        'infer_time': -1}
-        else:
-            assert isinstance(color_src, np.ndarray)
-            image = color_src
-
-        # 1b. get the depth image
-        depth = None
-        if args.op_rs_extract_3d_skel and depth_src is not None:
-            if isinstance(depth_src, str):
-                try:
-                    depth = read_depth_file(depth_src)
-                except Exception as e:
-                    print(e)
-                    print(f"[WARN] : Error loading data, skipping {depth_src}")
-                    return {'status': False,
-                            'data_prep_time': -1,
-                            'infer_time': -1}
-            else:
-                assert isinstance(depth_src, np.ndarray)
-                depth = depth_src
-
-        # 2. reshape images
-        try:
-            img_h, img_w = args.op_rs_image_height, args.op_rs_image_width
-            image = image.reshape(img_h, img_w, 3)
-            save_path_list = prepare_save_paths(skeleton_filepath,
-                                                args.op_save_skel,
-                                                args.op_save_skel_image,
-                                                args.op_rs_save_3d_skel)
-            data_tuples = [[image] + save_path_list]
-
-        except Exception as e:
-            print(e)
-            print(f"[WARN] : Error in reshaping image...")
-            if isinstance(color_src, str):
-                print(f"skipping {color_src}")
-            return {'status': False,
-                    'data_prep_time': -1,
-                    'infer_time': -1}
-
-    with Timer("infer", enable_timer, printout_timer) as t2:
-
-        # 3. infer images
-        try:
-            prof = 0
-            for (image, kpt_save_path, kpt_3d_save_path, skel_image_save_path
-                 ) in data_tuples:
-                if args.op_rs_extract_3d_skel:
-                    main_dir = os.path.dirname(os.path.dirname(kpt_save_path))
-                    intr_mat = read_calib_file(main_dir + "/calib/calib.csv")
-                    pose_extractor.predict_3d(image,
-                                              depth,
-                                              intr_mat,
-                                              kpt_save_path,
-                                              kpt_3d_save_path,
-                                              skel_image_save_path)
-                else:
-                    pose_extractor.predict(image,
-                                           kpt_save_path,
-                                           skel_image_save_path)
-        except Exception as e:
-            print(e)
-            print(f"[WARN] : Error in pose extraction...")
-            if isinstance(color_src, str):
-                print(f"skipping {color_src}")
-            return {'status': False,
-                    'data_prep_time': -1,
-                    'infer_time': -1}
-
-    return {'status': False,
-            'data_prep_time': t1.duration,
-            'infer_time': t2.duration}
-
-
-def rs_extract_skeletons_offline(args: argparse.Namespace):
+def rs_extract_skeletons_and_track_offline(args: argparse.Namespace):
     """Runs openpose inference and tracking on realsense camera in offline mode.
 
     Reads realsense image files under the `base_path` arg and extracts pose
@@ -182,7 +65,7 @@ def rs_extract_skeletons_offline(args: argparse.Namespace):
         TK = None
 
     # 1. If no error
-    while not _dict_check(empty_dict) and not end_loop:
+    while not dict_check(empty_dict) and not end_loop:
 
         filepath_dict = {i: [] for i in dev_list}
 
@@ -211,6 +94,13 @@ def rs_extract_skeletons_offline(args: argparse.Namespace):
             _c = 0
             tqdm_bar = tqdm(color_filepaths, dynamic_ncols=True)
 
+            calib_file = os.path.dirname(os.path.dirname(color_filepaths[0]))
+            calib_file = calib_file + "/calib/calib.csv"
+            if os.path.exists(calib_file):
+                intr_mat = read_calib_file(calib_file)
+            else:
+                intr_mat = None
+
             # 5. loop through filepaths of color image
             for idx, color_filepath in enumerate(tqdm_bar):
 
@@ -221,16 +111,16 @@ def rs_extract_skeletons_offline(args: argparse.Namespace):
                 #     _c += 1
                 #     continue
 
-                depth_filepath = color_filepath.replace('color', 'depth')
-                skel_filepath = color_filepath.replace('color', 'skeleton')
+                paths = color_filepath.split('/')
+                depth_filepath = color_filepath.replace(paths[-2], 'depth')
+                skel_filepath = color_filepath.replace(paths[-2], 'skeleton')
                 skel_filepath = skel_filepath.replace(
                     os.path.splitext(skel_filepath)[1], '.csv')
-
-                _image = read_color_file(color_filepath)
 
                 if TK is not None:
                     if delay_counter > 1:
                         delay_counter -= 1
+                        _image = read_color_file(color_filepath)
                         TK.no_measurement_predict_and_update()
                         PE.display(dev=dev,
                                    speed=display_speed,
@@ -243,20 +133,27 @@ def rs_extract_skeletons_offline(args: argparse.Namespace):
                         delay_counter = delay_switch
 
                 # 4. read and infer pose
-                infer_out = rs_extract_skeletons(args,
-                                                 PE,
-                                                 color_filepath,
-                                                 depth_filepath,
-                                                 skel_filepath,
-                                                 enable_timer)
-                boxes = PE.pyop.pose_bounding_box.copy()
-                scores = PE.pyop.pose_scores.copy()
-                keypoints = PE.pyop.pose_keypoints.copy()
-                heatmaps = PE.pyop.pose_heatmaps.copy()
+                infer_out = extract_2dskeletons(args=args,
+                                                pose_extractor=PE,
+                                                color_src=color_filepath,
+                                                depth_src=depth_filepath,
+                                                intr_mat=intr_mat,
+                                                skeleton_filepath=skel_filepath,
+                                                enable_timer=enable_timer)
+                if PE.pyop.pose_bounding_box is None:
+                    boxes = None
+                    scores = None
+                    keypoints = None
+                    heatmaps = None
+                else:
+                    boxes = PE.pyop.pose_bounding_box.copy()
+                    scores = PE.pyop.pose_scores.copy()
+                    keypoints = PE.pyop.pose_keypoints.copy()
+                    heatmaps = PE.pyop.pose_heatmaps.copy()
                 runtime['PE'].append(1/(infer_out['infer_time']+1e-8))
 
                 with Timer("update", enable_timer) as t:
-                    if TK is not None:
+                    if boxes is not None and TK is not None:
                         TK.update(boxes, scores, keypoints, heatmaps,
                                   (args.op_rs_image_width,
                                    args.op_rs_image_height))
@@ -269,20 +166,21 @@ def rs_extract_skeletons_offline(args: argparse.Namespace):
                 #                     bounding_box=False,
                 #                     tracks=TK.tracks)
 
-                img = PE.pyop.opencv_image
-                if TK is not None:
-                    img = PE.pyop._draw_bounding_box_tracking_image(img, TK.tracks)  # noqa
-                img = cv2.resize(img,
-                                 (int(img.shape[1]*args.op_display),
-                                  int(img.shape[0]*args.op_display)))
-                # _img = cv2.resize(_image,
-                #                   (int(_image.shape[1]*args.op_display),
-                #                    int(_image.shape[0]*args.op_display)))
-                # img = np.concatenate([img, _img], axis=0)
-                save_file = color_filepath.replace('color',
-                                                   f'color_{TK.name}')
-                os.makedirs(os.path.dirname(save_file), exist_ok=True)
                 if args.op_save_result_image and boxes is not None:
+                    img = PE.pyop.opencv_image
+                    if TK is not None:
+                        img = PE.pyop._draw_skeleton_text_image(img, scores)
+                        img = PE.pyop._draw_bounding_box_tracking_image(img, TK.tracks)  # noqa
+                    else:
+                        img = PE.pyop._draw_skeleton_text_image(img, scores)
+                        img = PE.pyop._draw_skeleton_bounding_box_image(img, boxes)  # noqa
+                    img = cv2.resize(img,
+                                     (int(img.shape[1]*args.op_display),
+                                      int(img.shape[0]*args.op_display)))
+                    paths = color_filepath.split('/')
+                    save_file = color_filepath.replace(
+                        paths[-2], f'{paths[-2]}_{TK.name}')
+                    os.makedirs(os.path.dirname(save_file), exist_ok=True)
                     cv2.imwrite(save_file, img)
 
                 tqdm_bar.set_description(
@@ -346,16 +244,22 @@ class ExtractSkeletonAndTrack:
 
     def extract_skeletons(self):
         while True:
-            (color_filepath,
-             depth_filepath,
-             skel_filepath) = self.infer_queue.get()
-            infer_out = rs_extract_skeletons(self.args,
-                                             self.PE,
-                                             color_filepath,
-                                             depth_filepath,
-                                             skel_filepath,
-                                             self.enable_timer,
-                                             False)
+            (color_filepath, depth_filepath, skel_filepath,
+             intr_mat, break_loop) = self.infer_queue.get()
+
+            if break_loop:
+                self.track_queue.put((None, None, None, None, None,
+                                      None, None, None, None, break_loop))
+                break
+
+            infer_out = extract_2dskeletons(args=self.args,
+                                            pose_extractor=self.PE,
+                                            color_src=color_filepath,
+                                            depth_src=depth_filepath,
+                                            intr_mat=intr_mat,
+                                            skeleton_filepath=skel_filepath,
+                                            enable_timer=self.enable_timer)
+
             if self.PE.pyop.pose_empty:
                 boxes, scores, keypoints, heatmaps, filered_skel = \
                     None, None, None, None, None
@@ -365,52 +269,69 @@ class ExtractSkeletonAndTrack:
                 keypoints = self.PE.pyop.pose_keypoints.copy()
                 heatmaps = self.PE.pyop.pose_heatmaps.copy()
                 filered_skel = self.PE.pyop.filtered_skel
+
             img = self.PE.pyop.opencv_image.copy()
+
             self.track_queue.put((img, boxes, scores, keypoints, heatmaps,
                                   filered_skel,
                                   infer_out['data_prep_time']+1e-8,
                                   infer_out['infer_time']+1e-8,
-                                  color_filepath))
+                                  color_filepath,
+                                  break_loop))
 
     def track(self):
         while True:
             (img, boxes, scores, keypoints, heatmaps, filered_skel,
-                prep_time, infer_time, color_fp) = self.track_queue.get()
+             prep_time, infer_time, color_fp, break_loop
+             ) = self.track_queue.get()
+
+            if break_loop:
+                self.write_queue.put((None, None, None, None, None, None,
+                                      break_loop))
+                break
+
             if boxes is not None and self.TK is not None:
                 with Timer("update", self.enable_timer, False) as t:
                     image_size = (self.args.op_rs_image_width,
                                   self.args.op_rs_image_height)
                     self.TK.update(boxes, scores, keypoints, heatmaps, image_size)  # noqa
                 if self.args.op_save_result_image:
-                    _fn = PyOpenPoseNative._draw_bounding_box_tracking_image
-                    img = _fn(img, self.TK.tracks)
-                self.write_queue.put((img, filered_skel, prep_time, infer_time,
-                                      t.duration+1e-8, color_fp))
+                    img = PYOP._draw_skeleton_text_image(img, scores)
+                    img = PYOP._draw_bounding_box_tracking_image(img, self.TK.tracks)  # noqa
+                duration = t.duration+1e-8
             else:
                 if self.args.op_save_result_image:
-                    _fn = PyOpenPoseNative._draw_skeleton_bounding_box_image
-                    img = _fn(img, boxes)
-                self.write_queue.put((img, filered_skel, prep_time, infer_time,
-                                     -1, color_fp))
+                    img = PYOP._draw_skeleton_text_image(img, scores)
+                    img = PYOP._draw_skeleton_bounding_box_image(img, boxes)  # noqa
+                duration = -1
+
+            self.write_queue.put((img, filered_skel, prep_time, infer_time,
+                                  duration, color_fp, break_loop))
+
+    def writeout(self):
+        while True:
+            (img, filered_skel, prep_time, infer_time, track_time,
+             color_fp, break_loop) = self.write_queue.get()
+
+            if img is None:
+                self.final_queue.put((None, None, None, None, break_loop))
+                break
+
+            if self.args.op_save_result_image and filered_skel is not None:
+                img = cv2.resize(img,
+                                 (int(img.shape[1]*self.args.op_display),
+                                  int(img.shape[0]*self.args.op_display)))
+                paths = color_fp.split('/')
+                save_file = color_fp.replace(
+                    paths[-2], f'{paths[-2]}_{self.TK.name}')
+                os.makedirs(os.path.dirname(save_file), exist_ok=True)
+                cv2.imwrite(save_file, img)
+
+            self.final_queue.put(
+                (filered_skel, prep_time, infer_time, track_time, break_loop))
 
 
-def writeout(self):
-    while True:
-        img, filered_skel, prep_time, infer_time, track_time, color_fp = \
-            self.write_queue.get()
-        if self.args.op_save_result_image and filered_skel is not None:
-            img = cv2.resize(img,
-                             (int(img.shape[1]*self.args.op_display),
-                                 int(img.shape[0]*self.args.op_display)))
-            save_file = color_fp.replace('color',
-                                         f'color_{self.TK.name}_delme')
-            os.makedirs(os.path.dirname(save_file), exist_ok=True)
-            cv2.imwrite(save_file, img)
-        self.final_queue.put(
-            (filered_skel, prep_time, infer_time, track_time))
-
-
-def rs_extract_skeletons_offline_mp(args: argparse.Namespace):
+def rs_extract_skeletons_and_track_offline_mp(args: argparse.Namespace):
     """Runs openpose inference and tracking on realsense camera in offline mode.
 
     Reads realsense image files under the `base_path` arg and extracts pose
@@ -455,7 +376,7 @@ def rs_extract_skeletons_offline_mp(args: argparse.Namespace):
     EST.start()
 
     # 1. If no error
-    while not _dict_check(empty_dict) and not end_loop:
+    while not dict_check(empty_dict) and not end_loop:
 
         filepath_dict = {i: [] for i in dev_list}
 
@@ -482,28 +403,41 @@ def rs_extract_skeletons_offline_mp(args: argparse.Namespace):
         for dev, color_filepaths in filepath_dict.items():
 
             _c = 0
+
             tqdm_bar = tqdm(color_filepaths, dynamic_ncols=True)
+            data_len = len(color_filepaths)
+            break_loop = False
+
+            calib_file = os.path.dirname(os.path.dirname(color_filepaths[0]))
+            calib_file = calib_file + "/calib/calib.csv"
+            if os.path.exists(calib_file):
+                intr_mat = read_calib_file(calib_file)
+            else:
+                intr_mat = None
 
             # 5. loop through filepaths of color image
             for idx, color_filepath in enumerate(tqdm_bar):
 
+                if idx + 1 == data_len:
+                    break_loop = True
+
                 if idx == 15:
                     runtime = {'PE': [], 'TK': []}
 
-                # if _c < 480:
-                #     _c += 1
-                #     continue
+                if _c < 590:
+                    _c += 1
+                    continue
 
-                depth_filepath = color_filepath.replace('color', 'depth')
-                skel_filepath = color_filepath.replace('color', 'skeleton')
+                paths = color_filepath.split('/')
+                depth_filepath = color_filepath.replace(paths[-2], 'depth')
+                skel_filepath = color_filepath.replace(paths[-2], 'skeleton')
                 skel_filepath = skel_filepath.replace(
                     os.path.splitext(skel_filepath)[1], '.csv')
-
-                _image = read_color_file(color_filepath)
 
                 if TK is not None:
                     if delay_counter > 1:
                         delay_counter -= 1
+                        _image = read_color_file(color_filepath)
                         TK.no_measurement_predict_and_update()
                         PE.display(dev=dev,
                                    speed=display_speed,
@@ -517,10 +451,14 @@ def rs_extract_skeletons_offline_mp(args: argparse.Namespace):
 
                 # 4. read and infer pose
                 EST.queue_input(
-                    (color_filepath, depth_filepath, skel_filepath))
+                    (color_filepath, depth_filepath, skel_filepath,
+                     intr_mat, break_loop))
 
-                (filered_skel, prep_time, infer_time, track_time) = \
-                    EST.queue_output()
+                (filered_skel, prep_time, infer_time, track_time, break_loop
+                 ) = EST.queue_output()
+
+                if break_loop:
+                    break
 
                 # status = PE.display(dev=dev,
                 #                     speed=display_speed,
@@ -553,23 +491,23 @@ if __name__ == "__main__":
     [arg_op, _] = get_parser().parse_known_args()
 
     if arg_op.op_proc in ['sp', 'mp']:
-        extract_skel_func = rs_extract_skeletons_offline_mp
+        extract_skel_func = rs_extract_skeletons_and_track_offline_mp
     else:
-        extract_skel_func = rs_extract_skeletons_offline
+        extract_skel_func = rs_extract_skeletons_and_track_offline
 
     # extract_skel_func(arg_op)
 
     arg_op.op_save_result_image = True
 
-    print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_deepsort")
-    arg_op.op_track_deepsort = True
-    extract_skel_func(arg_op)
-    arg_op.op_track_deepsort = False
-
-    # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_bytetrack")
-    # arg_op.op_track_bytetrack = True
+    # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_deepsort")
+    # arg_op.op_track_deepsort = True
     # extract_skel_func(arg_op)
-    # arg_op.op_track_bytetrack = False
+    # arg_op.op_track_deepsort = False
+
+    print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_bytetrack")
+    arg_op.op_track_bytetrack = True
+    extract_skel_func(arg_op)
+    arg_op.op_track_bytetrack = False
 
     # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_ocsort")
     # arg_op.op_track_ocsort = True

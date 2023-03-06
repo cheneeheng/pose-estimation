@@ -284,19 +284,24 @@ class PyOpenPoseNative:
         return
 
     @staticmethod
-    def _draw_skeleton_image(image: Optional[np.ndarray] = None,
-                             depth: Optional[np.ndarray] = None,
-                             score: float = -1) -> np.ndarray:
-        # keypoint_image = self.opencv_image
-        # keypoint_image = cv2.flip(keypoint_image, 1)
-        cv2.putText(image,
-                    "KP (%) : " + str(round(score, 2)),
-                    (10, 50),
-                    cv2.FONT_HERSHEY_PLAIN,
-                    2,
-                    (255, 0, 0),
-                    2,
-                    cv2.LINE_AA)
+    def _draw_skeleton_text_image(image: Optional[np.ndarray] = None,
+                                  scores: Optional[np.ndarray] = None
+                                  ) -> np.ndarray:
+        if scores is not None:
+            image = cv2.putText(image,
+                                "KP (%) : " + str(round(np.mean(scores), 2)),
+                                (10, 50),
+                                cv2.FONT_HERSHEY_PLAIN,
+                                1,
+                                (255, 0, 0),
+                                1,
+                                cv2.LINE_AA)
+        return image
+
+    @staticmethod
+    def _draw_skeleton_depth_image(image: Optional[np.ndarray] = None,
+                                   depth: Optional[np.ndarray] = None
+                                   ) -> np.ndarray:
         if depth is not None:
             colormap = cv2.applyColorMap(
                 cv2.convertScaleAbs(depth, alpha=0.065, beta=0),
@@ -346,7 +351,7 @@ class PyOpenPoseNative:
         return image
 
     def display(self,
-                device_sn: str,
+                win_name: str,
                 speed: int = 1000,
                 scale: float = 1.0,
                 depth_image: Optional[np.ndarray] = None,
@@ -357,9 +362,9 @@ class PyOpenPoseNative:
 
         image = self.opencv_image
 
-        image = self._draw_skeleton_image(image,
-                                          depth_image,
-                                          np.mean(self.pose_scores))
+        image = self._draw_skeleton_depth_image(image, depth_image)
+
+        image = self._draw_skeleton_text_image(image, self.pose_scores)
 
         if bounding_box:
             image = self._draw_skeleton_bounding_box_image(
@@ -378,10 +383,10 @@ class PyOpenPoseNative:
             image = np.concatenate([_image, image], axis=0)
 
         # overlay = cv2.resize(overlay, (800, 450))
-        if depth_image is None:
-            win_name = f'keypoint_image_{device_sn}'
-        else:
-            win_name = f'keypoint_depth_image_{device_sn}'
+        # if depth_image is None:
+        #     win_name = f'keypoint_image_{device_sn}'
+        # else:
+        #     win_name = f'keypoint_depth_image_{device_sn}'
         if scale >= 1000:
             cv2.namedWindow(win_name, cv2.WND_PROP_FULLSCREEN)
             cv2.setWindowProperty(win_name,
@@ -400,11 +405,11 @@ class PyOpenPoseNative:
 
     def save_skeleton_image(self,
                             save_path: str,
-                            scale: int = 1,
                             depth: Optional[np.ndarray] = None) -> None:
         image = self.opencv_image
-        image = self._draw_skeleton_image(image, depth,
-                                          np.mean(self.pose_scores))
+        image = self._draw_skeleton_depth_image(image, depth)
+        if not self.pose_empty:
+            image = self._draw_skeleton_text_image(image, self.pose_scores)
         # image = cv2.flip(image, 1)
         # _path = save_path.replace('skeleton', 'skeleton_color')
         # _path = _path.split('.')[0] + '.jpg'
@@ -438,6 +443,7 @@ class OpenPosePoseExtractor:
 
     def predict(self,
                 image: np.ndarray,
+                depth: np.ndarray,
                 kpt_save_path: Optional[str] = None,
                 skel_image_save_path: Optional[str] = None) -> None:
         self.pyop.predict(image)
@@ -445,7 +451,7 @@ class OpenPosePoseExtractor:
         if kpt_save_path is not None:
             self.pyop.save_pose_keypoints(kpt_save_path)
         if skel_image_save_path is not None:
-            self.pyop.save_skeleton_image(skel_image_save_path)
+            self.pyop.save_skeleton_image(skel_image_save_path, depth)
         # print(f"[INFO] : Openpose output saved in {kpt_save_path}")
 
     def predict_3d(self,
@@ -456,7 +462,7 @@ class OpenPosePoseExtractor:
                    kpt_save_path: Optional[str] = None,
                    kpt_3d_save_path: Optional[str] = None,
                    skel_image_save_path: Optional[str] = None) -> None:
-        self.predict(image, kpt_save_path, skel_image_save_path)
+        self.predict(image, depth, kpt_save_path, skel_image_save_path)
         self.pyop.convert_to_3d(
             depth_image=depth,
             intr_mat=intr_mat,
@@ -466,18 +472,24 @@ class OpenPosePoseExtractor:
             self.pyop.save_3d_pose_keypoints(kpt_3d_save_path)
 
     def display(self,
-                dev: str = "1",
+                win_name: str = "1",
                 speed: int = 1000,
                 scale: int = 1.0,
                 image: Optional[np.ndarray] = None,
                 bounding_box: bool = False,
                 tracks: list = None) -> Tuple[bool, Optional[np.ndarray]]:
         if self.pyop.datum.poseScores is None:
-            cv2.imshow(str(dev), image)
+            img = self.pyop.opencv_image
+            if image is not None:
+                _image = cv2.resize(image, (int(image.shape[1]*scale),
+                                            int(image.shape[0]*scale)))
+                img = np.concatenate([_image, img], axis=0)
+            cv2.imshow(win_name, img)
             cv2.waitKey(speed)
             return image
+
         else:
-            return self.pyop.display(str(dev),
+            return self.pyop.display(win_name,
                                      scale=scale,
                                      speed=speed,
                                      bounding_box=bounding_box,
