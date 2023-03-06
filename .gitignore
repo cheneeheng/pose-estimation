@@ -120,8 +120,6 @@ dmypy.json
 docker-compose.yml
 
 openpose/native/wrapper/2s_agcn/
-openpose/output/
-openpose/data/
 
-*.mp4
-*.avi
+data/mot17/dev1/100/color_*
+data/video/
