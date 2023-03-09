@@ -8,19 +8,19 @@ from queue import Queue
 import multiprocessing as mp
 from typing import Optional, Union
 
-from openpose.native.op_py.args import get_parser
-from openpose.native.op_py.inference import extract_2dskeletons
-from openpose.native.op_py.skeleton import PyOpenPoseNative as PYOP
-from openpose.native.op_py.skeleton import OpenPosePoseExtractor
-from openpose.native.op_py.track import Tracker
-from openpose.native.op_py.utils import dict_check
-from openpose.native.op_py.utils import Error
-from openpose.native.op_py.utils import Timer
-from openpose.native.op_py.utils_rs import get_rs_sensor_dir
-from openpose.native.op_py.utils_rs import read_calib_file
-from openpose.native.op_py.utils_rs import read_color_file
-from openpose.native.op_py.utils_rs import read_depth_file
-from openpose.native.op_py.utils_rs import prepare_save_paths
+from openpose.native.python.args import get_parser
+from openpose.native.python.inference import extract_2dskeletons
+from openpose.native.python.skeleton import PyOpenPoseNative as PYOP
+from openpose.native.python.skeleton import OpenPosePoseExtractor
+from openpose.native.python.track import Tracker
+from openpose.native.python.utils import dict_check
+from openpose.native.python.utils import Error
+from openpose.native.python.utils import Timer
+from openpose.native.python.utils_rs import get_rs_sensor_dir
+from openpose.native.python.utils_rs import read_calib_file
+from openpose.native.python.utils_rs import read_color_file
+from openpose.native.python.utils_rs import read_depth_file
+from openpose.native.python.utils_rs import prepare_save_paths
 
 
 def rs_extract_skeletons_and_track_offline(args: argparse.Namespace):

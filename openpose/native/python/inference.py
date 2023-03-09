@@ -5,13 +5,13 @@ import numpy as np
 from tqdm import tqdm
 from typing import Optional, Union
 
-from openpose.native.op_py.args import get_parser
-from openpose.native.op_py.skeleton import OpenPosePoseExtractor
-from openpose.native.op_py.track import Tracker
-from openpose.native.op_py.utils import Timer
-from openpose.native.op_py.utils_rs import read_color_file
-from openpose.native.op_py.utils_rs import read_depth_file
-from openpose.native.op_py.utils_rs import prepare_save_paths
+from openpose.native.python.args import get_parser
+from openpose.native.python.skeleton import OpenPosePoseExtractor
+from openpose.native.python.track import Tracker
+from openpose.native.python.utils import Timer
+from openpose.native.python.utils_rs import read_color_file
+from openpose.native.python.utils_rs import read_depth_file
+from openpose.native.python.utils_rs import prepare_save_paths
 
 
 def extract_2dskeletons(args: argparse.Namespace,
