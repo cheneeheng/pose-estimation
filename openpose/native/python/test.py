@@ -7,8 +7,8 @@ from openpose.native.python.skeleton import PyOpenPoseNative
 
 
 def test_op_runtime():
-    image_path = "openpose/data/test/pexels-photo-4384679.jpeg"
-    target_path = "openpose/data/test/output/inference_native"
+    image_path = "data/test/pexels-photo-4384679.jpeg"
+    target_path = "data/test/output/inference_native"
     model_folder = "/usr/local/src/openpose/models/"
     model_pose = "BODY_25"
     net_resolution = "-1x368"
@@ -33,20 +33,22 @@ def test_op_runtime():
     pyop.initialize()
 
     t_total = 0
-    N = 1000
+    N = 500
     image = cv2.imread(image_path)
     image = cv2.resize(image, (384, 384))
 
-    for _ in trange(N):
+    for n in trange(N):
         t_start = time.time()
         pyop.predict(image)
         pyop.filter_prediction()
+        # print(pyop.pose_scores)
         # pyop.display(1, 'dummy')
-        pyop.save_pose_keypoints(f'{target_path}/predictions.txt')
-        t_total += time.time() - t_start
+        # pyop.save_pose_keypoints(f'{target_path}/predictions.txt')
+        if n > 500//2:
+            t_total += time.time() - t_start
 
-    print(f"Average inference time over {N} trials : {t_total/N}s")
-
+    print(f"\nAverage inference time over {N-(500//2)} trials : {t_total/(N-(500//2)):.6f}s or {(N-(500//2))/t_total:.6f}fps")  # noqa
+    print(pyop.pose_scores)
 
 if __name__ == "__main__":
     test_op_runtime()
