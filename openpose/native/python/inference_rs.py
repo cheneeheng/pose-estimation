@@ -12,7 +12,6 @@ from openpose.native.python.args import get_parser
 from openpose.native.python.inference import extract_2dskeletons
 from openpose.native.python.skeleton import PyOpenPoseNative as PYOP
 from openpose.native.python.skeleton import OpenPosePoseExtractor
-from openpose.native.python.track import Tracker
 from openpose.native.python.utils import dict_check
 from openpose.native.python.utils import Error
 from openpose.native.python.utils import Timer
@@ -21,6 +20,8 @@ from openpose.native.python.utils_rs import read_calib_file
 from openpose.native.python.utils_rs import read_color_file
 from openpose.native.python.utils_rs import read_depth_file
 from openpose.native.python.utils_rs import prepare_save_paths
+
+from tracking.track import Tracker
 
 
 def rs_extract_skeletons_and_track_offline(args: argparse.Namespace):

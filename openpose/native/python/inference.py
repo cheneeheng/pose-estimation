@@ -7,11 +7,12 @@ from typing import Optional, Union
 
 from openpose.native.python.args import get_parser
 from openpose.native.python.skeleton import OpenPosePoseExtractor
-from openpose.native.python.track import Tracker
 from openpose.native.python.utils import Timer
 from openpose.native.python.utils_rs import read_color_file
 from openpose.native.python.utils_rs import read_depth_file
 from openpose.native.python.utils_rs import prepare_save_paths
+
+from tracking.track import Tracker
 
 
 def extract_2dskeletons(args: argparse.Namespace,
