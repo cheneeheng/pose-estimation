@@ -7,8 +7,9 @@ ENV TZ=Europe/Berlin
 ENV DEBIAN_FRONTEND=noninteractive
 
 # ------------------------------------------------------------------------------
-# Main apts 
+# SETUP
 # ------------------------------------------------------------------------------
+# Main apts 
 RUN rm /etc/apt/sources.list.d/cuda.list && \
     rm /etc/apt/sources.list.d/nvidia-ml.list && \
     rm -rf /var/lib/apt/lists/* && \
@@ -21,37 +22,8 @@ RUN rm /etc/apt/sources.list.d/cuda.list && \
         curl \
         git \
         tzdata \
-        ssh
-
-RUN wget https://github.com/Kitware/CMake/releases/download/v3.25.3/cmake-3.25.3-Linux-x86_64.tar.gz && \
-    tar xzf cmake-3.25.3-Linux-x86_64.tar.gz -C /opt && \
-    rm cmake-3.25.3-Linux-x86_64.tar.gz && \
-    ln -s /opt/cmake-3.25.3-linux-x86_64/bin/cmake /usr/local/bin/ && \
-    ln -s /opt/cmake-3.25.3-linux-x86_64/bin/ccmake /usr/local/bin/
-
-# ------------------------------------------------------------------------------
-# Python 3.8
-# ------------------------------------------------------------------------------
-RUN apt-get install -y software-properties-common && \
-    add-apt-repository -y ppa:deadsnakes/ppa && \
-    apt-get update -y && \
-    apt-get install -y --no-install-recommends \
-        python3.8 \
-        python3.8-dev \
-        python3.8-distutils \
-        python3.8-tk && \
-    update-alternatives --install \
-        /usr/bin/python3 \
-        python3 \
-        /usr/bin/python3.8 2; exit 0
-## Keeps Python from generating .pyc files in the container
-ENV PYTHONDONTWRITEBYTECODE=1
-## Turns off buffering for easier container logging
-ENV PYTHONUNBUFFERED=1
-
-# ------------------------------------------------------------------------------
-# Apt libraries
-# ------------------------------------------------------------------------------
+        ssh \
+        ca-certificates
 # ffmpeg is for video generation
 RUN apt-get install -y \
     libprotobuf-dev \
@@ -63,9 +35,30 @@ RUN apt-get install -y \
     libopencv-dev \
     ffmpeg  
 
-# ------------------------------------------------------------------------------
+# CMake 3.25.3
+RUN wget https://github.com/Kitware/CMake/releases/download/v3.25.3/cmake-3.25.3-Linux-x86_64.tar.gz && \
+    tar xzf cmake-3.25.3-Linux-x86_64.tar.gz -C /opt && \
+    rm cmake-3.25.3-Linux-x86_64.tar.gz && \
+    ln -s /opt/cmake-3.25.3-linux-x86_64/bin/cmake /usr/local/bin/ && \
+    ln -s /opt/cmake-3.25.3-linux-x86_64/bin/ccmake /usr/local/bin/
+
+# Python 3.8
+RUN apt-get install -y software-properties-common && \
+    add-apt-repository -y ppa:deadsnakes/ppa && \
+    apt-get update -y && \
+    apt-get install -y --no-install-recommends \
+        python3.8 \
+        python3.8-dev \
+        python3.8-distutils \
+        python3.8-tk && \
+    update-alternatives --install \
+        /usr/bin/python3 \
+        python3 \
+        /usr/bin/python3.8 2
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
 # pip
-# ------------------------------------------------------------------------------
 COPY ./requirements /tmp/requirements
 RUN curl https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py && \
     python3 /tmp/get-pip.py && \
@@ -82,19 +75,19 @@ RUN git clone https://github.com/cheneeheng/openpose.git /usr/local/src/openpose
 WORKDIR /usr/local/src/openpose/build
 # 7.5 = for turing architecture
 RUN cmake \
-    -DDOWNLOAD_BODY_25_MODEL:Bool=ON \
-    -DDOWNLOAD_BODY_COCO_MODEL:Bool=ON \
-    -DDOWNLOAD_BODY_MPI_MODEL:Bool=ON \
-    -DDOWNLOAD_FACE_MODEL:Bool=OFF \
-    -DDOWNLOAD_HAND_MODEL:Bool=OFF \
-    -DINSTRUCTION_SET:String=AVX2 \
-    -DCUDA_ARCH:String=Manual \
-    -DCUDA_ARCH_BIN:String="5.3 6.0 6.1 7.0 7.5" \
-    -DCUDA_ARCH_PTX:String="7.5" \
-    -DUSE_CUDNN:Bool=ON \
-    -DBUILD_PYTHON:Bool=ON \
-    -DPYTHON_EXECUTABLE:String="/usr/bin/python3.8" \
-    -DBUILD_EXAMPLES:Bool=OFF \
+    -DDOWNLOAD_BODY_25_MODEL:BOOL=ON \
+    -DDOWNLOAD_BODY_COCO_MODEL:BOOL=ON \
+    -DDOWNLOAD_BODY_MPI_MODEL:BOOL=ON \
+    -DDOWNLOAD_FACE_MODEL:BOOL=OFF \
+    -DDOWNLOAD_HAND_MODEL:BOOL=OFF \
+    -DINSTRUCTION_SET:STRING=AVX2 \
+    -DCUDA_ARCH:STRING=Manual \
+    -DCUDA_ARCH_BIN:STRING="5.3 6.0 6.1 7.0 7.5" \
+    -DCUDA_ARCH_PTX:STRING="7.5" \
+    -DUSE_CUDNN:BOOL=ON \
+    -DBUILD_PYTHON:BOOL=ON \
+    -DPYTHON_EXECUTABLE:STRING="/usr/bin/python3.8" \
+    -DBUILD_EXAMPLES:BOOL=OFF \
     .. && \
     make -j$(($(nproc) - 1))
 

@@ -20,29 +20,8 @@ RUN rm -rf /var/lib/apt/lists/* \
     git \
     cmake \
     tzdata \
-    ssh
-
-RUN wget https://github.com/Kitware/CMake/releases/download/v3.25.3/cmake-3.25.3-Linux-x86_64.tar.gz && \
-    tar xzf cmake-3.25.3-Linux-x86_64.tar.gz -C /opt && \
-    rm cmake-3.25.3-Linux-x86_64.tar.gz && \
-    ln -s /opt/cmake-3.25.3-linux-x86_64/bin/cmake /usr/local/bin/ && \
-    ln -s /opt/cmake-3.25.3-linux-x86_64/bin/ccmake /usr/local/bin/
-
-# ------------------------------------------------------------------------------
-# Python 3.8
-# ------------------------------------------------------------------------------
-RUN apt-get install -y python3.8 python3.8-dev && \
-    ln -s /usr/bin/python3.8 /usr/bin/python && \
-    ln -s /usr/bin/python3.8 /usr/bin/python3 && \
-    apt-get install -y python3-pip python3-tk; exit 0
-## Keeps Python from generating .pyc files in the container
-ENV PYTHONDONTWRITEBYTECODE=1
-## Turns off buffering for easier container logging
-ENV PYTHONUNBUFFERED=1
-
-# ------------------------------------------------------------------------------
-# Apt libraries
-# ------------------------------------------------------------------------------
+    ssh \
+    ca-certificates
 # ffmpeg is for video generation
 RUN apt-get install -y \
     libprotobuf-dev \
@@ -54,11 +33,30 @@ RUN apt-get install -y \
     libopencv-dev \
     ffmpeg  
 
-# ------------------------------------------------------------------------------
+# CMake 3.25.3
+RUN wget https://github.com/Kitware/CMake/releases/download/v3.25.3/cmake-3.25.3-Linux-x86_64.tar.gz && \
+    tar xzf cmake-3.25.3-Linux-x86_64.tar.gz -C /opt && \
+    rm cmake-3.25.3-Linux-x86_64.tar.gz && \
+    ln -s /opt/cmake-3.25.3-linux-x86_64/bin/cmake /usr/local/bin/ && \
+    ln -s /opt/cmake-3.25.3-linux-x86_64/bin/ccmake /usr/local/bin/
+
+# Python 3.8
+RUN apt-get install -y python3.8 python3.8-dev && \
+    rm /usr/bin/python3 && \
+    ln -s /usr/bin/python3.8 /usr/bin/python && \
+    ln -s /usr/bin/python3.8 /usr/bin/python3 && \
+    apt-get install -y python3-pip python3-tk
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
 # pip
-# ------------------------------------------------------------------------------
+RUN pip install --upgrade pip && \
+    apt purge python3-pip -y && \
+    ln -s /usr/local/bin/pip /usr/bin/pip
 COPY ./requirements /tmp/requirements
-RUN python3 -m pip install -r /tmp/requirements/requirements.txt
+RUN python3 -m pip install -r /tmp/requirements/main.txt && \
+    python3 -m pip install -r /tmp/requirements/extra.txt && \
+    python3 -m pip install -r /tmp/requirements/devel.txt
 
 # ------------------------------------------------------------------------------
 # Install openpose
@@ -68,15 +66,15 @@ RUN python3 -m pip install -r /tmp/requirements/requirements.txt
 RUN git clone https://github.com/cheneeheng/openpose.git /usr/local/src/openpose
 WORKDIR /usr/local/src/openpose/build
 RUN cmake \
-    -DDOWNLOAD_BODY_25_MODEL:Bool=ON \
-    -DDOWNLOAD_BODY_COCO_MODEL:Bool=ON \
-    -DDOWNLOAD_BODY_MPI_MODEL:Bool=ON \
-    -DDOWNLOAD_FACE_MODEL:Bool=OFF \
-    -DDOWNLOAD_HAND_MODEL:Bool=OFF \
-    -DGPU_MODE:String=CPU_ONLY \
+    -DDOWNLOAD_BODY_25_MODEL:BOOL=ON \
+    -DDOWNLOAD_BODY_COCO_MODEL:BOOL=ON \
+    -DDOWNLOAD_BODY_MPI_MODEL:BOOL=ON \
+    -DDOWNLOAD_FACE_MODEL:BOOL=OFF \
+    -DDOWNLOAD_HAND_MODEL:BOOL=OFF \
+    -DGPU_MODE:STRING=CPU_ONLY \
     -DBUILD_PYTHON=ON \
-    -DPYTHON_EXECUTABLE:String="/usr/bin/python3.8" \
-    -DBUILD_EXAMPLES:Bool=OFF \
+    -DPYTHON_EXECUTABLE=$(which python3) \
+    -DBUILD_EXAMPLES:BOOL=OFF \
      .. && \
      make -j$(($(nproc) - 1))
 
