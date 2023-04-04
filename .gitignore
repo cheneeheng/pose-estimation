@@ -118,8 +118,11 @@ dmypy.json
 
 *devcontainer*
 docker-compose.yml
+docker-compose.env
 
 openpose/native/wrapper/2s_agcn/
 
 data/mot17/dev1/100/color_*
 data/video/
+
+sandbox/

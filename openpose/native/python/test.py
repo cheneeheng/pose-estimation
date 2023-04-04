@@ -44,11 +44,12 @@ def test_op_runtime():
         # print(pyop.pose_scores)
         # pyop.display(1, 'dummy')
         # pyop.save_pose_keypoints(f'{target_path}/predictions.txt')
-        if n > 500//2:
+        if n > N//2:
             t_total += time.time() - t_start
 
-    print(f"\nAverage inference time over {N-(500//2)} trials : {t_total/(N-(500//2)):.6f}s or {(N-(500//2))/t_total:.6f}fps")  # noqa
+    print(f"\nAverage inference time over {N-(N//2)} trials : {t_total/(N-(N//2)):.6f}s or {(N-(N//2))/t_total:.6f}fps")  # noqa
     print(pyop.pose_scores)
+
 
 if __name__ == "__main__":
     test_op_runtime()
