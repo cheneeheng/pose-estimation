@@ -134,7 +134,7 @@ def get_parser() -> argparse.ArgumentParser:
     # EXPERIMENTS OPTIONS ------------------------------------------------------
     p.add_argument('--op-save-result-image',
                    type=str2bool,
-                   default=True,
+                   default=False,
                    help='If true saves tracking+pose results in image form.')
     p.add_argument('--op-proc',
                    type=str,
