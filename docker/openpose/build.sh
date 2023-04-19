@@ -12,12 +12,16 @@ if [ $# -ge 1 ]; then
         DOCKER_FILE="dockerfiles/Dockerfile.U20"
         BASE_IMAGE="nvidia/cuda:11.7.1-cudnn8-devel-ubuntu20.04"
         IMAGE_NAME="${IMAGE_NAME}:cuda11.7.1-cudnn8-devel-ubuntu20.04"
+    elif [ "$1" = "ubuntu20demo" ]; then
+        DOCKER_FILE="dockerfiles/Dockerfile.U20DEMO"
+        BASE_IMAGE="nvidia/cuda:11.7.1-cudnn8-devel-ubuntu20.04"
+        IMAGE_NAME="${IMAGE_NAME}:cuda11.7.1-cudnn8-devel-ubuntu20.04-demo"
     elif [ "$1" = "ubuntu20cpu" ]; then
         DOCKER_FILE="dockerfiles/Dockerfile.U20CPU"
         BASE_IMAGE="ubuntu:20.04"
         IMAGE_NAME="${IMAGE_NAME}:ubuntu20.04"
     else
-        echo "Unknown argument, should be {ubuntu18/ubuntu20/ubuntu20cpu}"
+        echo "Unknown argument, should be {ubuntu18/ubuntu20/ubuntu20demo/ubuntu20cpu}"
         exit 1
     fi
 
@@ -45,7 +49,7 @@ if [ $# -ge 1 ]; then
 
 else
 
-    echo "1 argument is expected : {ubuntu18/ubuntu20/ubuntu20cpu}"
+    echo "1 argument is expected : {ubuntu18/ubuntu20/ubuntu20demo/ubuntu20cpu}"
     exit 1
 
 fi

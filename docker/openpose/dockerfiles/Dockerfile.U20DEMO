@@ -1,0 +1,103 @@
+ARG BASE_IMAGE=nvidia/cuda:11.7.1-cudnn8-devel-ubuntu20.04
+
+FROM ${BASE_IMAGE}
+
+ENV LANG en_US.UTF-8
+ENV TZ=Europe/Berlin
+ENV DEBIAN_FRONTEND=noninteractive
+
+# ------------------------------------------------------------------------------
+# SETUP
+# ------------------------------------------------------------------------------
+# Main apts 
+RUN rm -rf /var/lib/apt/lists/* && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+    sudo \
+    nano \
+    unzip \
+    wget \
+    curl \
+    git \
+    tzdata \
+    ssh \
+    ca-certificates
+# ffmpeg is for video generation
+RUN apt-get install -y \
+    libprotobuf-dev \
+    protobuf-compiler \
+    libgoogle-glog-dev \
+    libboost-all-dev \
+    libhdf5-dev \
+    libatlas-base-dev \
+    libopencv-dev \
+    ffmpeg  
+
+# CMake 3.25.3
+RUN wget https://github.com/Kitware/CMake/releases/download/v3.25.3/cmake-3.25.3-Linux-x86_64.tar.gz && \
+    tar xzf cmake-3.25.3-Linux-x86_64.tar.gz -C /opt && \
+    rm cmake-3.25.3-Linux-x86_64.tar.gz && \
+    ln -s /opt/cmake-3.25.3-linux-x86_64/bin/cmake /usr/local/bin/ && \
+    ln -s /opt/cmake-3.25.3-linux-x86_64/bin/ccmake /usr/local/bin/
+
+# Python 3.8
+RUN apt-get install -y python3.8 python3.8-dev && \
+    rm /usr/bin/python3 && \
+    ln -s /usr/bin/python3.8 /usr/bin/python && \
+    ln -s /usr/bin/python3.8 /usr/bin/python3 && \
+    apt-get install -y python3-pip python3-tk
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# pip
+RUN pip install --upgrade pip && \
+    apt purge python3-pip -y && \
+    ln -s /usr/local/bin/pip /usr/bin/pip
+COPY ./requirements /tmp/requirements
+RUN python3 -m pip install -r /tmp/requirements/main.txt && \
+    python3 -m pip install -r /tmp/requirements/extra.txt && \
+    python3 -m pip install -r /tmp/requirements/devel.txt
+
+# ------------------------------------------------------------------------------
+# Install openpose
+# ------------------------------------------------------------------------------
+# Based on : https://github.com/esemeniuc/openpose-docker/blob/master/Dockerfile
+# and : https://hub.docker.com/r/cwaffles/openpose
+RUN git clone https://github.com/cheneeheng/openpose.git /usr/local/src/openpose
+WORKDIR /usr/local/src/openpose/build
+# Default for cuda11+cudnn8 (frontend flag is for cudnn8)
+# 7.5 = for turing architecture
+RUN cmake \
+    -DDOWNLOAD_BODY_25_MODEL:BOOL=ON \
+    -DDOWNLOAD_BODY_COCO_MODEL:BOOL=ON \
+    -DDOWNLOAD_BODY_MPI_MODEL:BOOL=ON \
+    -DDOWNLOAD_FACE_MODEL:BOOL=OFF \
+    -DDOWNLOAD_HAND_MODEL:BOOL=OFF \
+    -DCUDA_ARCH:STRING=Manual \
+    -DCUDA_ARCH_BIN:STRING="6.1 7.5" \
+    -DCUDA_ARCH_PTX:STRING="7.5" \
+    -DUSE_CUDNN:BOOL=ON \
+    -DUSE_CUDNN_FRONTEND:BOOL=ON \
+    -DBUILD_PYTHON:BOOL=ON \
+    -DPYTHON_EXECUTABLE=$(which python3) \
+    -DBUILD_EXAMPLES:BOOL=OFF \
+    .. && \
+    make -j$(($(nproc) - 1))
+
+RUN cd python/openpose && \
+    make && \
+    cp ./pyopenpose.cpython-38-x86_64-linux-gnu.so /usr/local/lib/python3.8/dist-packages && \
+    ln -s ./pyopenpose.cpython-38-x86_64-linux-gnu.so /usr/local/lib/python3.8/dist-packages/pyopenpose
+ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/src/openpose/build/python/openpose"
+
+RUN python3 -m pip install git+https://github.com/cheneeheng/cython_bbox.git
+
+WORKDIR /usr/local/src
+RUN wget https://raw.githubusercontent.com/cheneeheng/realsense-simple-wrapper/main/docker/realsense/install_script.sh && \
+    mv install_script.sh install_realsense.sh && \
+    sh install_realsense.sh && \
+    wget https://raw.githubusercontent.com/cheneeheng/2s-AGCN/main/docker/install_script.sh && \
+    mv install_script.sh install_agcn.sh && \
+    sh install_agcn.sh
+
+WORKDIR /code
