@@ -1,6 +1,6 @@
 
 [submodule "realsense-simple-wrapper"]
-	path = submodules/realsense-simple-wrapper
+	path = submodules/realsense_simple_wrapper
 	url = git@github.com:cheneeheng/realsense-simple-wrapper.git
 [submodule "ByteTrack"]
 	path = submodules/ByteTrack
@@ -14,3 +14,6 @@
 [submodule "submodules/AlphaPose"]
 	path = submodules/AlphaPose
 	url = git@github.com:cheneeheng/AlphaPose.git
+[submodule "submodules/2s-AGCN"]
+	path = submodules/AGCN
+	url = git@github.com:cheneeheng/2s-AGCN.git
