@@ -16,52 +16,61 @@ from submodules.StrongSORT.deep_sort.tracker import Tracker as StrongSortTracker
 from submodules.StrongSORT.deep_sort.nn_matching import NearestNeighborDistanceMetric  # noqa
 
 
+def str2bool(v):
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
 class DeepSortTrackerArgs:
-    def __init__(self) -> None:
-        self.metric = 'cosine'
-
+    def __init__(self, args) -> None:
+        self.metric = args.deepsort_metric
         self.opt = opt
-        self.opt.NSA = False
-        self.opt.EMA = None
-        self.opt.MC = None
-        self.opt.woC = False
-        self.opt.EMA_alpha = None
-        self.opt.MC_lambda = None
-
-        self.opt.max_cosine_distance = 0.2
-        self.opt.nn_budget = 100
+        self.opt.NSA = args.deepsort_nsa
+        self.opt.EMA = args.deepsort_ema
+        self.opt.MC = args.deepsort_mc
+        self.opt.woC = args.deepsort_woC
+        self.opt.EMA_alpha = args.deepsort_emaalpha
+        self.opt.MC_lambda = args.deepsort_mclambda
+        self.opt.max_cosine_distance = args.deepsort_maxcosinedistance
+        self.opt.nn_budget = args.deepsort_nnbudget
 
 
 class ByteTrackerArgs:
-    # tracking confidence threshold, splits detection to high and low
-    # detection confidence groups.
-    track_thresh = 0.5
-    # the frames for keep lost tracks
-    track_buffer = 30
-    # matching threshold for tracking (IOU)
-    match_thresh = 0.8
-    # test mot20 dataset
-    mot20 = False
+    def __init__(self, args) -> None:
+        # tracking confidence threshold, splits detection to high and low
+        # detection confidence groups.
+        # track_thresh = 0.5
+        self.track_thresh = args.bytetracker_trackthresh
+        # the frames for keep lost tracks
+        self.track_buffer = args.bytetracker_trackbuffer
+        # matching threshold for tracking (IOU)
+        self.match_thresh = args.bytetracker_matchthresh
+        # match_thresh = 0.3
+        # test mot20 dataset
+        self.mot20 = args.bytetracker_mot20
 
 
 class OCSortArgs:
-    def __init__(self) -> None:
-        self.det_thresh = 0.5  # 0.5
-        self.max_age = 30
-        self.min_hits = 3
-        self.iou_threshold = 0.3
-        self.delta_t = 3
+    def __init__(self, args) -> None:
+        self.det_thresh = args.ocsort_detthresh
+        self.max_age = args.ocsort_maxage
+        self.min_hits = args.ocsort_minhits
+        self.iou_threshold = args.ocsort_iouthreshold
+        self.delta_t = args.ocsort_deltat
         # ASSO_FUNCS in ocsort.py
-        self.asso_func = "iou"
+        self.asso_func = args.ocsort_assofunc
         # momentum value
-        self.inertia = 0.2
-        self.use_byte = True
+        self.inertia = args.ocsort_inertia
+        self.use_byte = args.ocsort_usebyte
 
 
 class StrongSortTrackerArgs:
-    def __init__(self) -> None:
-        self.metric = 'cosine'
-
+    def __init__(self, args) -> None:
+        self.metric = args.strongsort_metric
         # # DEFAULTS
         # self.bot = True  # the REID model used
         # if self.bot:
@@ -74,34 +83,20 @@ class StrongSortTrackerArgs:
         #     self.nn_budget = 1
         # else:
         #     self.nn_budget = 100
-
-        nsa = True
-        # nsa = False
-
-        woc = True
-        # woc = False
-
-        ema_alpha = 0.9
-        # ema_alpha = None
-
-        mc_lambda = 0.98
-        # mc_lambda = None
-
         self.opt = opt
-        self.opt.NSA = nsa
-        self.opt.EMA = True if ema_alpha is not None else False
-        self.opt.MC = True if mc_lambda is not None else False
-        self.opt.woC = woc
-        self.opt.EMA_alpha = ema_alpha
-        self.opt.MC_lambda = mc_lambda
+        self.opt.NSA = args.strongsort_nsa
+        self.opt.EMA = args.strongsort_ema
+        self.opt.EMA_alpha = args.strongsort_emaalpha
+        self.opt.MC = args.strongsort_mc
+        self.opt.MC_lambda = args.strongsort_mclambda
+        self.opt.woC = args.strongsort_woc
 
 
 # Tracking inspired by : https://github.com/ortegatron/liveposetracker
 class Tracker():
 
     def __init__(self,
-                 mode: str = 'deep_sort',
-                 input_args: argparse.Namespace = None,
+                 input_args: argparse.Namespace,
                  max_age: int = 30) -> None:
         """Intializes the tracker class.
 
@@ -110,27 +105,26 @@ class Tracker():
                 Same as buffer_size in byte tracker. Defaults to 30.
         """
         self.detections = None
-
-        if mode == 'deep_sort':
+        if input_args.op_track_deepsort:
             self.name = 'deep_sort'
-            args = DeepSortTrackerArgs()
+            args = DeepSortTrackerArgs(input_args)
             metric = NearestNeighborDistanceMetric(
                 args.metric, args.opt.max_cosine_distance, args.opt.nn_budget)
             self.tracker = StrongSortTracker(
                 metric, max_age=max_age, options=args.opt)
-        elif mode == 'byte_tracker':
+        elif input_args.op_track_bytetrack:
             self.name = 'byte_tracker'
-            args = ByteTrackerArgs()
+            args = ByteTrackerArgs(input_args)
             args.track_buffer = max_age
             self.tracker = BYTETracker(args)
-        elif mode == 'oc_sort':
+        elif input_args.op_track_ocsort:
             self.name = 'oc_sort'
-            args = OCSortArgs()
+            args = OCSortArgs(input_args)
             args.max_age = max_age
             self.tracker = OCSort(**args.__dict__)
-        elif mode == 'strong_sort':
+        elif input_args.op_track_strongsort:
             self.name = 'strong_sort'
-            args = StrongSortTrackerArgs()
+            args = StrongSortTrackerArgs(input_args)
             metric = NearestNeighborDistanceMetric(
                 args.metric, args.opt.max_cosine_distance, args.opt.nn_budget)
             self.tracker = StrongSortTracker(

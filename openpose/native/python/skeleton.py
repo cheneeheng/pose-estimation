@@ -128,7 +128,13 @@ class PyOpenPoseNative:
         # [op_h, op_w, 76] : all heatmaps
         # [M, J, 3] : person, joints, xyz
         if self._pose_heatmaps is None:
-            return np.moveaxis(self.datum.poseHeatMaps, 0, -1)
+            if self.datum.poseHeatMaps is None:
+                j = self.datum.poseKeypoints.shape[1]
+                w = self.datum.netInputSizes[0].x
+                h = self.datum.netInputSizes[0].y
+                return np.zeros((h, w, j))
+            else:
+                return np.moveaxis(self.datum.poseHeatMaps, 0, -1)
         else:
             return self._pose_heatmaps
 
@@ -478,20 +484,23 @@ class OpenPosePoseExtractor:
                 image: Optional[np.ndarray] = None,
                 bounding_box: bool = False,
                 tracks: list = None) -> Tuple[bool, Optional[np.ndarray]]:
-        if self.pyop.datum.poseScores is None:
-            img = self.pyop.opencv_image
-            if image is not None:
-                _image = cv2.resize(image, (int(image.shape[1]*scale),
-                                            int(image.shape[0]*scale)))
-                img = np.concatenate([_image, img], axis=0)
-            cv2.imshow(win_name, img)
-            cv2.waitKey(speed)
-            return image
+        if scale > 0:
+            if self.pyop.datum.poseScores is None:
+                img = self.pyop.opencv_image
+                if image is not None:
+                    _image = cv2.resize(image, (int(image.shape[1]*scale),
+                                                int(image.shape[0]*scale)))
+                    img = np.concatenate([_image, img], axis=0)
+                cv2.imshow(win_name, img)
+                cv2.waitKey(speed)
+                return True, image
 
+            else:
+                return self.pyop.display(win_name,
+                                         scale=scale,
+                                         speed=speed,
+                                         bounding_box=bounding_box,
+                                         tracks=tracks,
+                                         ori_image=image)
         else:
-            return self.pyop.display(win_name,
-                                     scale=scale,
-                                     speed=speed,
-                                     bounding_box=bounding_box,
-                                     tracks=tracks,
-                                     ori_image=image)
+            return True, None

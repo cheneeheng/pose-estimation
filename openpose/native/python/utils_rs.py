@@ -123,24 +123,32 @@ def read_calib_file(calib_file: str) -> dict:
     return calib_data
 
 
-def prepare_save_paths(skel_filepath: Optional[str] = None,
+def prepare_save_paths(skeleton_folder: Optional[str] = None,
+                       prefix: str = '',
                        save_skel: bool = False,
                        save_skel_image: bool = False,
-                       save_3d_skel: bool = False) -> tuple:
-    if skel_filepath is None:
-        return [None, None, None]
+                       save_3d_skel: bool = False) -> dict:
+    if save_skel or save_skel_image or save_3d_skel:
+        assert skeleton_folder is not None
+
+    if skeleton_folder is None:
+        assert not save_skel and not save_skel_image and not save_3d_skel
+    else:
+        os.makedirs(skeleton_folder, exist_ok=True)
 
     if save_skel:
-        csv_path = skel_filepath
+        csv_path = os.path.join(skeleton_folder, f'{prefix}_skeleton.csv')
     else:
         csv_path = None
     if save_3d_skel:
-        csv_3d_path = skel_filepath.replace('skeleton', 'skeleton3d')
+        csv_3d_path = os.path.join(skeleton_folder, f'{prefix}_skeleton3d.csv')
     else:
         csv_3d_path = None
     if save_skel_image:
-        _path = skel_filepath.replace('skeleton', 'skeleton_color')
-        jpg_path = _path.split('.')[0] + '.jpg'
+        jpg_path = os.path.join(skeleton_folder, f'{prefix}_skeleton.jpg')
     else:
         jpg_path = None
-    return [csv_path, csv_3d_path, jpg_path]
+
+    return {'skel_save_path': csv_path,
+            '3dskel_save_path': csv_3d_path,
+            'skel_image_save_path': jpg_path}

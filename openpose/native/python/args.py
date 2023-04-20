@@ -28,20 +28,24 @@ def get_parser() -> argparse.ArgumentParser:
                    help='max number of skeletons to save.')
     p.add_argument('--op-heatmaps-add-parts',
                    type=str2bool,
-                   default=True,
+                   default=False,
                    help='')
     p.add_argument('--op-heatmaps-add-bkg',
                    type=str2bool,
-                   default=True,
+                   default=False,
                    help='')
     p.add_argument('--op-heatmaps-add-PAFs',
                    type=str2bool,
-                   default=True,
+                   default=False,
                    help='')
     p.add_argument('--op-heatmaps-scale',
                    type=int,
                    default=1,
                    help='')
+    p.add_argument('--op-save-skel-folder',
+                   type=str,
+                   default="",
+                   help='folder to save skeleton results.')
     p.add_argument('--op-save-skel',
                    type=str2bool,
                    default=False,
@@ -50,14 +54,22 @@ def get_parser() -> argparse.ArgumentParser:
                    type=str2bool,
                    default=False,
                    help='if true, saves the 2d skeleton image.')
-    p.add_argument('--op-color-image',
+    # p.add_argument('--op-skel-file',
+    #                type=str,
+    #                default="skel.txt",
+    #                help='file to save skeleton results.')
+    p.add_argument('--op-input-color-image',
                    type=str,
                    default="",
                    help='path to input color image/folder.')
-    p.add_argument('--op-skel-file',
-                   type=str,
-                   default="skel.txt",
-                   help='file to save skeleton results.')
+    p.add_argument('--op-image-width',
+                   type=int,
+                   default=1920,
+                   help='image width in px')
+    p.add_argument('--op-image-height',
+                   type=int,
+                   default=1080,
+                   help='image height in px')
 
     # DEPTH OPTIONS ------------------------------------------------------------
     p.add_argument('--op-patch-offset',
@@ -68,13 +80,21 @@ def get_parser() -> argparse.ArgumentParser:
                    type=str2bool,
                    default=False,
                    help='whether to use coordinate system of NTU')
+    p.add_argument('--op-extract-3d-skel',
+                   type=str2bool,
+                   default=False,
+                   help='if true, tries to extract 3d skeleton.')
+    p.add_argument('--op-save-3d-skel',
+                   type=str2bool,
+                   default=False,
+                   help='if true, saves the 3d skeleton.')
 
     # DISPLAY OPTIONS ----------------------------------------------------------
     p.add_argument('--op-display',
                    type=float,
                    default=1.0,
                    help='scale for displaying skel images.')
-    p.add_argument('--op-display-depth',
+    p.add_argument('--op-display-depth',  # NO USED
                    type=int,
                    default=0,
                    help='scale for displaying skel images with depth.')
@@ -84,22 +104,6 @@ def get_parser() -> argparse.ArgumentParser:
                    type=str,
                    default='data/mot17',
                    help='path to folder with saved rs data.')
-    p.add_argument('--op-rs-image-width',
-                   type=int,
-                   default=1920,
-                   help='image width in px')
-    p.add_argument('--op-rs-image-height',
-                   type=int,
-                   default=1080,
-                   help='image height in px')
-    p.add_argument('--op-rs-extract-3d-skel',
-                   type=str2bool,
-                   default=False,
-                   help='if true, tries to extract 3d skeleton.')
-    p.add_argument('--op-rs-save-3d-skel',
-                   type=str2bool,
-                   default=False,
-                   help='if true, saves the 3d skeleton.')
     # p.add_argument('--op-rs-save-heatmaps',
     #                type=str2bool,
     #                default=False,
@@ -130,6 +134,37 @@ def get_parser() -> argparse.ArgumentParser:
                    type=int,
                    default=30,
                    help="the frames for keep lost tracks.")
+
+    p.add_argument('--deepsort-metric', type=str, default='cosine')
+    p.add_argument('--deepsort-opt-nsa', type=str2bool, default=False)
+    p.add_argument('--deepsort-opt-ema', type=str2bool, default=False)
+    p.add_argument('--deepsort-opt-emaalpha', type=float, default=0.0)
+    p.add_argument('--deepsort-opt-mc', type=str2bool, default=False)
+    p.add_argument('--deepsort-opt-mclambda', type=float, default=0.0)
+    # without cascade in linear assignment
+    p.add_argument('--deepsort-opt-woc', type=str2bool, default=False)
+    p.add_argument('--deepsort-opt-maxcosinedistance', type=float, default=0.2)
+    p.add_argument('--deepsort-opt-nnbudget', type=int, default=100)
+    p.add_argument('--strongsort-metric', type=str, default='cosine')
+    p.add_argument('--strongsort-opt-nsa', type=str2bool, default=True)
+    p.add_argument('--strongsort-opt-ema', type=str2bool, default=True)
+    p.add_argument('--strongsort-opt-emaalpha', type=float, default=0.9)
+    p.add_argument('--strongsort-opt-mc', type=str2bool, default=True)
+    p.add_argument('--strongsort-opt-mclambda', type=float, default=0.98)
+    # without cascade in linear assignment
+    p.add_argument('--strongsort-opt-woc', type=str2bool, default=True)
+    p.add_argument('--bytetracker-trackthresh', type=float, default=0.5)
+    p.add_argument('--bytetracker-trackbuffer', type=int, default=30)
+    p.add_argument('--bytetracker-matchthresh', type=float, default=0.8)
+    p.add_argument('--bytetracker-mot20', type=str2bool, default=False)
+    p.add_argument('--ocsort-detthresh', type=float, default=0.5)
+    p.add_argument('--ocsort-maxage', type=int, default=30)
+    p.add_argument('--ocsort-minhits', type=int, default=3)
+    p.add_argument('--ocsort-iouthreshold', type=float, default=0.3)
+    p.add_argument('--ocsort-deltat', type=int, default=3)
+    p.add_argument('--ocsort-assofunc', type=str, default="iou")
+    p.add_argument('--ocsort-inertia', type=float, default=0.2)
+    p.add_argument('--ocsort-usebyte', type=str2bool, default=True)
 
     # EXPERIMENTS OPTIONS ------------------------------------------------------
     p.add_argument('--op-save-result-image',

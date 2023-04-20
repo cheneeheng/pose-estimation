@@ -1,28 +1,80 @@
-import argparse
 import os
 from tqdm import tqdm
 
-from openpose.native.python.args import get_parser
-from openpose.native.python.inference import ExtractSkeletonAndTrack
-from openpose.native.python.skeleton import OpenPosePoseExtractor
-from openpose.native.python.utils import dict_check
-from openpose.native.python.utils import Error
-from openpose.native.python.utils_rs import get_rs_sensor_dir
-from openpose.native.python.utils_rs import read_calib_file
-from openpose.native.python.utils_rs import read_color_file
-
-from tracking.track import Tracker
+from openpose.native.python.inference_rs import get_parser
+from openpose.native.python.inference_rs import OpenPosePoseExtractor
+from openpose.native.python.inference_rs import Tracker
+from openpose.native.python.inference_rs import ExtractSkeletonAndTrack
+from openpose.native.python.inference_rs import read_calib_file
+from openpose.native.python.inference_rs import get_rs_sensor_dir
+from openpose.native.python.inference_rs import Error
+from openpose.native.python.inference_rs import dict_check
 
 
-def rs_extract_skeletons_and_track_offline_mp(args: argparse.Namespace):
-    """Runs openpose inference and tracking on realsense camera in offline mode.
+if __name__ == "__main__":
 
-    Reads realsense image files under the `base_path` arg and extracts pose
-    from the images using openpose.
+    [args, _] = get_parser().parse_known_args()
+    args.op_model_folder = "/usr/local/src/openpose/models/"
+    args.op_model_pose = "BODY_25"
+    args.op_net_resolution = "-1x368"
+    args.op_skel_thres = 0.2
+    args.op_max_true_body = 8
+    args.op_save_skel_folder = "./"
+    args.op_save_skel = False
+    args.op_save_skel_image = False
+    # For skel extraction/tracking in inference.py
+    args.op_input_color_image = ""
+    args.op_image_width = 848
+    args.op_image_height = 480
+    # # For 3d skel extraction
+    # args.op_patch_offset = 2
+    # # For 3d skel extraction
+    # args.op_ntu_format = False
+    # args.op_extract_3d_skel = False
+    # args.op_save_3d_skel = False
+    args.op_display = 1.0
+    # args.op_display_depth = 0  # Not used
+    # For skel extraction/tracking in inference_rs.py
+    # args.op_rs_dir = "data/mot17"
+    args.op_rs_dir = "/data/realsense"
+    args.op_rs_delete_image = False
+    args.op_save_result_image = False
+    args.op_proc = "sp"
+    # args.op_track_deepsort = True
+    args.op_track_bytetrack = True
+    # args.op_track_ocsort = True
+    # args.op_track_strongsort = True
+    args.op_track_buffer = 30
+    args.bytetracker_trackthresh = 0.2
+    args.bytetracker_trackbuffer = 30
+    args.bytetracker_matchthresh = 0.8
+    args.bytetracker_mot20 = False
+    print("========================================")
+    print(">>>>> args <<<<<")
+    print("========================================")
+    for k, v in vars(args).items():
+        print(f"{k} : {v}")
+    print("========================================")
 
-    Args:
-        args (argparse.Namespace): CLI arguments
-    """
+    # # extract_skel_func = rs_extract_skeletons_and_track_offline_mp
+    # # extract_skel_func(arg_op)
+    # # arg_op.op_save_result_image = True
+    # # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_deepsort")
+    # # arg_op.op_track_deepsort = True
+    # # extract_skel_func(arg_op)
+    # # arg_op.op_track_deepsort = False
+    # # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_bytetrack")
+    # # arg_op.op_track_bytetrack = True
+    # # extract_skel_func(arg_op)
+    # # arg_op.op_track_bytetrack = False
+    # # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_ocsort")
+    # # arg_op.op_track_ocsort = True
+    # # extract_skel_func(arg_op)
+    # # arg_op.op_track_ocsort = False
+    # # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_strongsort")
+    # # arg_op.op_track_strongsort = True
+    # # extract_skel_func(arg_op)
+    # # arg_op.op_track_strongsort = False
 
     assert os.path.isdir(args.op_rs_dir), f'{args.op_rs_dir} does not exist...'
 
@@ -34,11 +86,11 @@ def rs_extract_skeletons_and_track_offline_mp(args: argparse.Namespace):
     end_loop = False
 
     # Delay = predict and no update in tracker
-    delay_switch = 5
+    delay_switch = 0
     delay_counter = 0
 
     # For cv.imshow
-    display_speed = 1
+    display_speed = 1000
 
     # Runtime logging
     enable_timer = True
@@ -78,6 +130,9 @@ def rs_extract_skeletons_and_track_offline_mp(args: argparse.Namespace):
         # 4. loop through devices for offline inference ------------------------
         for dev, color_filepaths in filepath_dict.items():
 
+            if end_loop:
+                break
+
             _c = 0
 
             tqdm_bar = tqdm(color_filepaths, dynamic_ncols=True)
@@ -100,7 +155,7 @@ def rs_extract_skeletons_and_track_offline_mp(args: argparse.Namespace):
                 if idx == 15:
                     runtime = {'PE': [], 'TK': []}
 
-                # if _c < 590:
+                # if _c < 550:
                 #     _c += 1
                 #     continue
 
@@ -114,7 +169,6 @@ def rs_extract_skeletons_and_track_offline_mp(args: argparse.Namespace):
                 # 6. track without pose extraction -----------------------------
                 if delay_counter > 0:
                     delay_counter -= 1
-                    _image = read_color_file(color_filepath)
                     EST.TK.no_measurement_predict_and_update()
                     EST.PE.display(win_name=dev,
                                    speed=display_speed,
@@ -127,9 +181,10 @@ def rs_extract_skeletons_and_track_offline_mp(args: argparse.Namespace):
                     delay_counter = delay_switch
 
                     # 7. infer pose and track ----------------------------------
-                    EST.queue_input(
-                        (color_filepath, depth_filepath, skel_filepath,
-                         intr_mat, False))
+                    EST.queue_input((color_filepath, None, None, None, False))
+                    # EST.queue_input(
+                    #     (color_filepath, depth_filepath, skel_filepath,
+                    #      intr_mat, False))
 
                     (filered_skel, prep_time, infer_time, track_time, _
                      ) = EST.queue_output()
@@ -157,44 +212,8 @@ def rs_extract_skeletons_and_track_offline_mp(args: argparse.Namespace):
                         f"FPS TK : {sum(runtime['TK'])/len(runtime['TK']):.3f}"
                     )
 
-                    if args.op_rs_delete_image:
-                        os.remove(color_filepath)
-
                 if break_loop:
                     EST.break_process_loops()
                     break
 
             end_loop = True
-
-
-if __name__ == "__main__":
-
-    [arg_op, _] = get_parser().parse_known_args()
-
-    extract_skel_func = rs_extract_skeletons_and_track_offline_mp
-
-    # extract_skel_func(arg_op)
-
-    # arg_op.op_save_result_image = True
-
-    # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_deepsort")
-    # arg_op.op_track_deepsort = True
-    # extract_skel_func(arg_op)
-    # arg_op.op_track_deepsort = False
-
-    print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_bytetrack")
-    arg_op.op_track_bytetrack = True
-    extract_skel_func(arg_op)
-    arg_op.op_track_bytetrack = False
-
-    # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_ocsort")
-    # arg_op.op_track_ocsort = True
-    # extract_skel_func(arg_op)
-    # arg_op.op_track_ocsort = False
-
-    # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_strongsort")
-    # arg_op.op_track_strongsort = True
-    # extract_skel_func(arg_op)
-    # arg_op.op_track_strongsort = False
-
-    print(f"[INFO] : FINISHED")
