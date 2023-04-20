@@ -29,14 +29,14 @@ class DeepSortTrackerArgs:
     def __init__(self, args) -> None:
         self.metric = args.deepsort_metric
         self.opt = opt
-        self.opt.NSA = args.deepsort_nsa
-        self.opt.EMA = args.deepsort_ema
-        self.opt.MC = args.deepsort_mc
-        self.opt.woC = args.deepsort_woC
-        self.opt.EMA_alpha = args.deepsort_emaalpha
-        self.opt.MC_lambda = args.deepsort_mclambda
-        self.opt.max_cosine_distance = args.deepsort_maxcosinedistance
-        self.opt.nn_budget = args.deepsort_nnbudget
+        self.opt.NSA = args.deepsort_opt_nsa
+        self.opt.EMA = args.deepsort_opt_ema
+        self.opt.MC = args.deepsort_opt_mc
+        self.opt.woC = args.deepsort_opt_woc
+        self.opt.EMA_alpha = args.deepsort_opt_emaalpha
+        self.opt.MC_lambda = args.deepsort_opt_mclambda
+        self.opt.max_cosine_distance = args.deepsort_opt_maxcosinedistance
+        self.opt.nn_budget = args.deepsort_opt_nnbudget
 
 
 class ByteTrackerArgs:
@@ -84,12 +84,12 @@ class StrongSortTrackerArgs:
         # else:
         #     self.nn_budget = 100
         self.opt = opt
-        self.opt.NSA = args.strongsort_nsa
-        self.opt.EMA = args.strongsort_ema
-        self.opt.EMA_alpha = args.strongsort_emaalpha
-        self.opt.MC = args.strongsort_mc
-        self.opt.MC_lambda = args.strongsort_mclambda
-        self.opt.woC = args.strongsort_woc
+        self.opt.NSA = args.strongsort_opt_nsa
+        self.opt.EMA = args.strongsort_opt_ema
+        self.opt.EMA_alpha = args.strongsort_opt_emaalpha
+        self.opt.MC = args.strongsort_opt_mc
+        self.opt.MC_lambda = args.strongsort_opt_mclambda
+        self.opt.woC = args.strongsort_opt_woc
 
 
 # Tracking inspired by : https://github.com/ortegatron/liveposetracker

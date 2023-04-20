@@ -18,14 +18,17 @@ if __name__ == "__main__":
     args.op_model_pose = "BODY_25"
     args.op_net_resolution = "-1x368"
     args.op_skel_thres = 0.2
-    args.op_max_true_body = 8
+    args.op_max_true_body = 4
+    args.op_heatmaps_add_parts = True
+    args.op_heatmaps_add_bkg = True
+    args.op_heatmaps_add_PAFs = True
     args.op_save_skel_folder = "./"
     args.op_save_skel = False
     args.op_save_skel_image = False
     # For skel extraction/tracking in inference.py
     args.op_input_color_image = ""
-    args.op_image_width = 848
-    args.op_image_height = 480
+    args.op_image_width = 1920
+    args.op_image_height = 1080
     # # For 3d skel extraction
     # args.op_patch_offset = 2
     # # For 3d skel extraction
@@ -35,20 +38,20 @@ if __name__ == "__main__":
     args.op_display = 1.0
     # args.op_display_depth = 0  # Not used
     # For skel extraction/tracking in inference_rs.py
-    # args.op_rs_dir = "data/mot17"
-    args.op_rs_dir = "/data/realsense"
+    args.op_rs_dir = "data/mot17"
+    # args.op_rs_dir = "/data/realsense"
     args.op_rs_delete_image = False
     args.op_save_result_image = False
     args.op_proc = "sp"
-    # args.op_track_deepsort = True
-    args.op_track_bytetrack = True
+    args.op_track_deepsort = True
+    # args.op_track_bytetrack = True
     # args.op_track_ocsort = True
     # args.op_track_strongsort = True
     args.op_track_buffer = 30
     args.bytetracker_trackthresh = 0.2
     args.bytetracker_trackbuffer = 30
     args.bytetracker_matchthresh = 0.8
-    args.bytetracker_mot20 = False
+    args.ocsort_detthresh = 0.2
     print("========================================")
     print(">>>>> args <<<<<")
     print("========================================")
@@ -197,6 +200,21 @@ if __name__ == "__main__":
                                             tracks=EST.TK.tracks)
                     if not status[0]:
                         break_loop = True
+
+                    for track in EST.TK.tracks:
+                        try:
+                            # deepsort / ocsortq
+                            bb = track.to_tlbr()
+                        except AttributeError:
+                            # bytetrack
+                            bb = track.tlbr
+                        print(track.track_id,
+                              bb,
+                              EST.PE.pyop.pose_bounding_box[track.det_id])
+
+                    print(EST.PE.pyop.pose_bounding_box)
+                    # print(EST.PE.pyop.pose_scores)
+                    # EST.PE.pyop.pose_keypoints[EST.PE.pyop.pose_scores==track.score]
 
                     # 8. printout ----------------------------------------------
                     runtime['PE'].append(1/infer_time)

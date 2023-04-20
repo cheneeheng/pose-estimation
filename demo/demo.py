@@ -37,6 +37,9 @@ def get_op_args():
     args.op_net_resolution = "-1x368"
     args.op_skel_thres = 0.2
     args.op_max_true_body = 8
+    # args.op_heatmaps_add_parts = True
+    # args.op_heatmaps_add_bkg = True
+    # args.op_heatmaps_add_PAFs = True
     args.op_save_skel_folder = ""
     args.op_save_skel = False
     args.op_save_skel_image = False
@@ -87,6 +90,10 @@ if __name__ == "__main__":
     # Runtime logging
     enable_timer = True
     runtime = {'PE': [], 'TK': []}
+
+    # For skeleton storage
+    skeletons = {}  # {trackid: (v,c)}
+    skeletons_age = {}  # {trackid: counter }
 
     # 1. args ------------------------------------------------------------------
     rs_args = get_rs_args()
@@ -154,6 +161,33 @@ if __name__ == "__main__":
 
                 (filered_skel, prep_time, infer_time, track_time, _
                  ) = EST.queue_output()
+
+                if EST.PE.pyop.pose_keypoints is not None:
+                    # skeletons[].append()
+                    print(EST.PE.pyop.pose_keypoints.shape)  # m,v,c
+                    # if tracks is not None:
+                    #     for track in tracks:
+                    #         try:
+                    #             # deepsort / ocsort
+                    #             bb = track.to_tlbr()
+                    #         except AttributeError:
+                    #             # bytetrack
+                    #             bb = track.tlbr
+                    #         l, t, r, b = bb
+                    #         tl = (np.floor(l).astype(int),
+                    #               np.floor(t).astype(int))
+                    #         br = (np.ceil(r).astype(int),
+                    #               np.ceil(b).astype(int))
+                    #         image = cv2.rectangle(image, tl, br,
+                    #                               get_color(track.track_id), 1)
+                    #         cv2.putText(image,
+                    #                     f"ID : {track.track_id}",
+                    #                     tl,
+                    #                     cv2.FONT_HERSHEY_PLAIN,
+                    #                     2,
+                    #                     get_color(track.track_id),
+                    #                     2,
+                    #                     cv2.LINE_AA)
 
                 status = EST.PE.display(win_name="000",
                                         speed=display_speed,
