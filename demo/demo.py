@@ -1,3 +1,4 @@
+import cv2
 import json
 import numpy as np
 import os
@@ -8,6 +9,7 @@ from functools import partial
 import torch
 from torch.nn import functional as F
 
+from rs_py import rs
 from rs_py.rs_run_devices import get_rs_parser
 from rs_py.rs_run_devices import printout
 from rs_py.rs_run_devices import RealsenseWrapper
@@ -16,6 +18,7 @@ from openpose.native.python.inference_rs import get_parser as get_op_parser
 from openpose.native.python.inference_rs import OpenPosePoseExtractor
 from openpose.native.python.inference_rs import Tracker
 from openpose.native.python.inference_rs import ExtractSkeletonAndTrack
+from openpose.native.python.utils import Timer
 
 from infer.inference import ActionRecognition
 from utils.parser import get_parser as get_ar_parser
@@ -27,7 +30,7 @@ def get_rs_args():
     args, _ = get_rs_parser().parse_known_args()
     args.rs_steps = 1000
     args.rs_fps = 30
-    args.rs_ir_emitter_power = 150
+    args.rs_ir_emitter_power = 290
     args.rs_display_frame = 1
     args.rs_save_with_key = False
     args.rs_save_data = False
@@ -59,9 +62,9 @@ def get_op_args():
     args.op_image_width = 848
     args.op_image_height = 480
     # # For 3d skel extraction
-    # args.op_patch_offset = 2
+    args.op_patch_offset = 3
     # # For 3d skel extraction
-    # args.op_ntu_format = False
+    args.op_ntu_format = True
     # args.op_extract_3d_skel = False
     # args.op_save_3d_skel = False
     args.op_display = 1.0
@@ -76,7 +79,7 @@ def get_op_args():
     # args.op_track_ocsort = True
     # args.op_track_strongsort = True
     args.op_track_buffer = 30
-    args.bytetracker_trackthresh = 0.2
+    args.bytetracker_trackthresh = 0.25
     args.bytetracker_trackbuffer = 30
     args.bytetracker_matchthresh = 0.8
     args.bytetracker_mot20 = False
@@ -105,7 +108,7 @@ def get_ar_args():
     parser.set_defaults(**{'config': config})
     args = load_parser_args_from_config(parser)
     args.weights = weights
-    args.max_frame = 300
+    args.max_frame = 100
     args.max_num_skeleton_true = 2
     args.max_num_skeleton = 4
     args.num_joint = 15
@@ -165,10 +168,38 @@ class SkeletonStorage():
             if not self.valid[i]:
                 self.counter[i] += 1
             if self.counter[i] > 30:
-                del_idx.append(self.ids[i])
+                del_idx.append(i)
             self.valid[i] = False
         for i in del_idx:
             self.delete(i)
+
+
+def visualize_rs(color_image: np.ndarray, depth_colormap: np.ndarray,
+                 depth_scale: float, winname: str):
+    # overlay depth colormap with color image
+    images_overlapped = cv2.addWeighted(src1=color_image, alpha=0.3,
+                                        src2=depth_colormap, beta=0.5,
+                                        gamma=0)
+    # Set pixels further than clipping_distance to grey
+    clipping_distance = 3.5 / depth_scale
+    grey_color = 153
+    # depth image is 1 channel, color is 3 channels
+    depth_image_3d = np.dstack(
+        (depth_image, depth_image, depth_image))
+    bg_removed = np.where(
+        (depth_image_3d > clipping_distance) | (depth_image_3d <= 0),
+        grey_color, images_overlapped)
+    cv2.namedWindow(f'{winname}', cv2.WINDOW_AUTOSIZE)
+    cv2.imshow(f'{winname}', bg_removed)
+    key = cv2.waitKey(1)
+    # Press esc or 'q' to close the image window
+    if key & 0xFF == ord('q') or key == 27:
+        cv2.destroyAllWindows()
+        cv2.waitKey(5)
+        printout("`q` button pressed", 'i')
+        return True
+    else:
+        return False
 
 
 if __name__ == "__main__":
@@ -182,7 +213,12 @@ if __name__ == "__main__":
 
     # Runtime logging
     enable_timer = True
-    runtime = {'PE': [], 'TK': []}
+    fps = {'PE': [], 'TK': []}
+    infer_time = -1
+    track_time = -1
+    filered_skel = -1
+    prep_time = -1
+    recog_time = -1
 
     # For skeleton storage
     skelstorage = SkeletonStorage()
@@ -206,6 +242,8 @@ if __name__ == "__main__":
     time.sleep(3)
 
     device_sn = list(rsw.enabled_devices.keys())[0]
+    depth_scale = rsw.calib_data.get_data(device_sn)['depth']['depth_scale']
+    intr_mat = rsw.calib_data.get_data(device_sn)['depth']['intrinsic_mat']
 
     # 3. Setup extract and track classes ---------------------------------------
     PoseExtractor = OpenPosePoseExtractor(op_args)
@@ -230,25 +268,35 @@ if __name__ == "__main__":
         while True:
 
             if c < 15:
-                runtime = {'PE': [], 'TK': []}
+                fps = {'PE': [], 'TK': []}
 
-            # 4. grab image from realsense -------------------------------------
-            rsw.step(
-                display=rs_args.rs_display_frame,
-                display_and_save_with_key=rs_args.rs_save_with_key
-            )
+            # 5. grab image from realsense -------------------------------------
+            # rsw.step(
+            #     display=rs_args.rs_display_frame,
+            #     display_and_save_with_key=rs_args.rs_save_with_key
+            # )
+            with Timer("update", enable_timer, False) as t:
+                rsw.step(
+                    display=0,
+                    display_and_save_with_key=False,
+                    use_colorizer=True
+                )
+            rs_time = t.duration
             color_image = rsw.frames[device_sn]['color_framedata']  # h,w,c
             depth_image = rsw.frames[device_sn]['depth_framedata']  # h,w
-
-            if rsw.key & 0xFF == ord('q'):
-                printout("`q` button pressed", 'i')
+            depth_colormap = rsw.frames[device_sn]['depth_color_framedata']
+            quit_key = visualize_rs(color_image=color_image,
+                                    depth_colormap=depth_colormap,
+                                    depth_scale=depth_scale,
+                                    winname=f'rs_{device_sn}')
+            if quit_key:
                 break
 
-            # 5. track without pose extraction ---------------------------------
+            # 6. track without pose extraction ---------------------------------
             if delay_counter > 0:
                 delay_counter -= 1
                 EST.TK.no_measurement_predict_and_update()
-                EST.PE.display(win_name="000",
+                EST.PE.display(win_name=f'est_{device_sn}',
                                speed=display_speed,
                                scale=op_args.op_display,
                                image=None,
@@ -256,19 +304,23 @@ if __name__ == "__main__":
                                tracks=EST.TK.tracks)
             else:
                 delay_counter = delay_switch
-
-                # 6. infer pose and track --------------------------------------
+                # 7. infer pose and track --------------------------------------
                 EST.queue_input((color_image, None, None, None, False))
-
-                (filered_skel, prep_time, infer_time, track_time, _
-                 ) = EST.queue_output()
-
-                for track in EST.TK.tracks:
-                    skelstorage.add(track.track_id,
-                                    EST.PE.pyop.pose_keypoints[track.det_id])
+                est_out = EST.queue_output()
+                (filered_skel, prep_time, infer_time, track_time, _) = est_out
+                if not EST.PE.pyop.pose_empty:
+                    EST.PE.pyop.convert_to_3d(
+                        depth_image=depth_image,
+                        intr_mat=intr_mat,
+                        depth_scale=depth_scale
+                    )
+                    for track in EST.TK.tracks:
+                        skelstorage.add(
+                            track.track_id,
+                            EST.PE.pyop.pose_keypoints_3d[track.det_id]
+                        )
                 skelstorage.check_valid_and_delete()
-
-                status = EST.PE.display(win_name="000",
+                status = EST.PE.display(win_name=f'est_{device_sn}',
                                         speed=display_speed,
                                         scale=op_args.op_display,
                                         image=None,
@@ -277,23 +329,22 @@ if __name__ == "__main__":
                 if not status[0]:
                     break
 
-            # 7. action recognition --------------------------------------------
+            # 8. action recognition --------------------------------------------
             if time.time() - ar_start_time > int(ar_args.interval):
-                if enable_timer:
-                    start_time = time.time()
-
-                if len(skelstorage.skeletons) > 0:
-                    # data  # M, 1, V, C
-                    AR.append_data(skelstorage.get_last_skel())
-
-                    # logits = [#labels], prediction = label from 0 - #labels-1
-                    logits, prediction = AR.predict()
-                    print(MAPPING[prediction+1])
-
-                if enable_timer:
-                    recog_time = -1
-                else:
-                    recog_time = time.time() - start_time
+                with Timer("update", enable_timer, False) as t:
+                    if len(skelstorage.skeletons) > 0:
+                        # data  # M, 1, V, C
+                        data = skelstorage.get_last_skel()
+                        AR.append_data(data[:op_args.op_max_true_body,
+                                            :,
+                                            :op_args.num_joint,
+                                            :])
+                        # logits = [#labels], prediction = from 0 - #labels-1
+                        logits, prediction = AR.predict()
+                        print(skelstorage.ids,
+                              [round(i*100, 1) for i in logits],
+                              MAPPING[prediction+1])
+                    recog_time = t.duration
 
             # 8. printout ------------------------------------------------------
             if c % rs_args.rs_fps == 0:
@@ -304,18 +355,19 @@ if __name__ == "__main__":
                 #     'i'
                 # )
                 color_timestamp = list(rsw.frames.values())[0].get('color_timestamp')  # noqa
-                runtime['PE'].append(1/infer_time)
-                runtime['TK'].append(1/track_time)
+                fps['PE'].append(1/infer_time)
+                fps['TK'].append(1/track_time)
                 printout(
                     f"Image : {color_timestamp} | "
                     f"#Skel filtered : {filered_skel} | "
                     f"#Tracks : {len(EST.TK.tracks)} | "
+                    f"RS time : {rs_time:.3f} | "
                     f"Prep time : {prep_time:.3f} | "
                     f"Pose time : {infer_time:.3f} | "
                     f"Track time : {track_time:.3f} | "
                     f"Recog time : {recog_time:.3f} | "
-                    f"FPS PE : {sum(runtime['PE'])/len(runtime['PE']):.3f} | "
-                    f"FPS TK : {sum(runtime['TK'])/len(runtime['TK']):.3f}",
+                    f"FPS PE : {sum(fps['PE'])/len(fps['PE']):.3f} | "
+                    f"FPS TK : {sum(fps['TK'])/len(fps['TK']):.3f}",
                     'i'
                 )
 

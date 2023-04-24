@@ -43,12 +43,12 @@ if __name__ == "__main__":
     args.op_rs_delete_image = False
     args.op_save_result_image = False
     args.op_proc = "sp"
-    args.op_track_deepsort = True
-    # args.op_track_bytetrack = True
+    # args.op_track_deepsort = True
+    args.op_track_bytetrack = True
     # args.op_track_ocsort = True
     # args.op_track_strongsort = True
     args.op_track_buffer = 30
-    args.bytetracker_trackthresh = 0.2
+    args.bytetracker_trackthresh = 0.4
     args.bytetracker_trackbuffer = 30
     args.bytetracker_matchthresh = 0.8
     args.ocsort_detthresh = 0.2
@@ -93,7 +93,7 @@ if __name__ == "__main__":
     delay_counter = 0
 
     # For cv.imshow
-    display_speed = 1000
+    display_speed = 1
 
     # Runtime logging
     enable_timer = True
@@ -201,6 +201,7 @@ if __name__ == "__main__":
                     if not status[0]:
                         break_loop = True
 
+                    ti, di = [], []
                     for track in EST.TK.tracks:
                         try:
                             # deepsort / ocsortq
@@ -208,11 +209,15 @@ if __name__ == "__main__":
                         except AttributeError:
                             # bytetrack
                             bb = track.tlbr
-                        print(track.track_id,
-                              bb,
-                              EST.PE.pyop.pose_bounding_box[track.det_id])
+                        ti.append(track.track_id)
+                        di.append(track.det_id)
+                        # print(track.track_id, track.det_id)
+                        # print(track.track_id,
+                        #       bb,
+                        #       EST.PE.pyop.pose_bounding_box[track.det_id])
+                    print(sorted(ti), sorted(di))
 
-                    print(EST.PE.pyop.pose_bounding_box)
+                    # print(EST.PE.pyop.pose_bounding_box)
                     # print(EST.PE.pyop.pose_scores)
                     # EST.PE.pyop.pose_keypoints[EST.PE.pyop.pose_scores==track.score]
 
