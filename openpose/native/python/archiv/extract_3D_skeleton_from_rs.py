@@ -94,8 +94,7 @@ if __name__ == "__main__":
         pyop = PyOpenPoseNative(params,
                                 arg_op.op_skel_thres,
                                 arg_op.op_max_true_body,
-                                arg_op.op_patch_offset,
-                                arg_op.op_ntu_format)
+                                arg_op.op_patch_offset)
         pyop.initialize()
 
     # REALSENSE

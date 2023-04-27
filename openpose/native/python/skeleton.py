@@ -3,6 +3,7 @@ import cv2
 import os
 import numpy as np
 import pyopenpose as op
+import matplotlib.pyplot as plt
 
 from typing import Optional, Union, List, Tuple
 from .utils import get_color
@@ -12,8 +13,7 @@ def get_3d_skeleton(skeleton: np.ndarray,
                     depth_img: np.ndarray,
                     intr_mat: Union[list, np.ndarray],
                     depth_scale: float = 1e-3,
-                    patch_offset: int = 2,
-                    ntu_format: bool = False) -> np.ndarray:
+                    patch_offset: int = 2) -> np.ndarray:
     if isinstance(intr_mat, list):
         fx = intr_mat[0]
         fy = intr_mat[4]
@@ -36,11 +36,8 @@ def get_3d_skeleton(skeleton: np.ndarray,
         depth_avg = np.mean(patch)
         x3d = (x-cx) / fx * depth_avg
         y3d = (y-cy) / fy * depth_avg
-        if ntu_format:
-            joints3d.append([-x3d*depth_scale, -depth_avg*depth_scale,
-                             -y3d*depth_scale])
-        else:
-            joints3d.append([x3d, y3d, depth_avg])
+        joints3d.append([x3d*depth_scale, y3d*depth_scale,
+                         depth_avg*depth_scale])
     return np.array(joints3d)
 
 
@@ -74,8 +71,7 @@ class PyOpenPoseNative:
                  params: Optional[dict] = None,
                  skel_thres: float = 0.0,
                  max_true_body: int = 2,
-                 patch_offset: int = 2,
-                 ntu_format: bool = False) -> None:
+                 patch_offset: int = 2) -> None:
         super().__init__()
 
         # default parameters
@@ -108,7 +104,6 @@ class PyOpenPoseNative:
         self.skel_thres = skel_thres
         self.max_true_body = max_true_body
         self.patch_offset = patch_offset
-        self.ntu_format = ntu_format
 
     @property
     def opencv_image(self) -> np.ndarray:
@@ -263,15 +258,13 @@ class PyOpenPoseNative:
             # 3.a. Empty array if scores is None (no skeleton at all)
             # 3.b. Else pick pose based on prediction scores
             for pose_keypoint in self.pose_keypoints:
-                # ntu_format => x,y(up),z(neg) in meter.
                 # [V,C]
                 skeleton_3d = get_3d_skeleton(
                     skeleton=pose_keypoint,
                     depth_img=depth_image,
                     intr_mat=intr_mat,
                     depth_scale=depth_scale,
-                    patch_offset=self.patch_offset,
-                    ntu_format=self.ntu_format
+                    patch_offset=self.patch_offset
                 )
                 pose_keypoints_3d.append(skeleton_3d)
             self._pose_keypoints_3d = np.asarray(pose_keypoints_3d)
@@ -443,7 +436,6 @@ class OpenPosePoseExtractor:
             args.op_skel_thres,
             args.op_max_true_body,
             args.op_patch_offset,
-            args.op_ntu_format
         )
         self.pyop.initialize()
 

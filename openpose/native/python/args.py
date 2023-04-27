@@ -76,10 +76,6 @@ def get_parser() -> argparse.ArgumentParser:
                    type=int,
                    default=2,
                    help='offset of patch used to determine depth')
-    p.add_argument('--op-ntu-format',
-                   type=str2bool,
-                   default=False,
-                   help='whether to use coordinate system of NTU')
     p.add_argument('--op-extract-3d-skel',
                    type=str2bool,
                    default=False,

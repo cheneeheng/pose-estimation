@@ -16,7 +16,6 @@ def test_op_runtime():
     skel_thres = 0.5
     max_true_body = 2
     patch_offset = 2
-    ntu_format = False
 
     os.makedirs(target_path, exist_ok=True)
     params = dict(
@@ -28,8 +27,7 @@ def test_op_runtime():
     pyop = PyOpenPoseNative(params,
                             skel_thres,
                             max_true_body,
-                            patch_offset,
-                            ntu_format)
+                            patch_offset)
     pyop.initialize()
 
     t_total = 0
