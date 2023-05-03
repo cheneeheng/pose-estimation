@@ -6,6 +6,11 @@ def get_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description='Extract skeleton using OPENPOSE')
 
     # OPEN POSE OPTIONS --------------------------------------------------------
+    p.add_argument('--op-mode',
+                   type=str,
+                   default="online",
+                   help='what mode to run the inference. [single,online,offline,comparetracker]')  # noqa
+
     p.add_argument('--op-model-folder',
                    type=str,
                    default="/usr/local/src/openpose/models/",
@@ -163,7 +168,8 @@ def get_parser() -> argparse.ArgumentParser:
     p.add_argument('--ocsort-usebyte', type=str2bool, default=True)
 
     # EXPERIMENTS OPTIONS ------------------------------------------------------
-    p.add_argument('--op-save-result-image',
+    # the 2d pose can be saved with --op-save-skel-image
+    p.add_argument('--op-save-track-image',
                    type=str2bool,
                    default=False,
                    help='If true saves tracking+pose results in image form.')

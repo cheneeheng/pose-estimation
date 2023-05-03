@@ -118,12 +118,12 @@ class ExtractSkeletonAndTrack:
                     image_size = (self.args.op_image_width,
                                   self.args.op_image_height)
                     self.TK.update(boxes, scores, keypoints, heatmaps, image_size)  # noqa
-                if self.args.op_save_result_image:
+                if self.args.op_save_track_image:
                     img = PYOP._draw_skeleton_text_image(img, scores)
                     img = PYOP._draw_bounding_box_tracking_image(img, self.TK.tracks)  # noqa
                 duration = t.duration+1e-8
             else:
-                if self.args.op_save_result_image:
+                if self.args.op_save_track_image:
                     img = PYOP._draw_skeleton_text_image(img, scores)
                     img = PYOP._draw_skeleton_bounding_box_image(img, boxes)
                 duration = -1
@@ -140,7 +140,7 @@ class ExtractSkeletonAndTrack:
                 self.final_queue.put((None, None, None, None, break_loop))
                 break
 
-            if self.args.op_save_result_image and filered_skel is not None:
+            if self.args.op_save_track_image and filered_skel is not None:
                 paths = color_fp.split('/')
                 save_file = color_fp.replace(
                     paths[-2], f'{paths[-2]}_{self.TK.name}')
@@ -268,6 +268,151 @@ def extract_2dskeletons(args: argparse.Namespace,
             'infer_time': t2.duration}
 
 
+def extract_2dskeletons_online(args: argparse.Namespace):
+    """Runs openpose inference in online mode.
+
+    Reads image files under the `color_image` arg and extracts pose
+    from the images using openpose.
+
+    Args:
+        args (argparse.Namespace): CLI arguments
+    """
+
+    assert os.path.isdir(args.op_input_color_image), \
+        f'{args.op_input_color_image} does not exist...'
+
+    base_path = args.op_input_color_image
+
+    # For cv.imshow
+    display_speed = 1
+
+    # Runtime logging
+    enable_timer = True
+
+    # 1. initialize class ------------------------------------------------------
+    PE = OpenPosePoseExtractor(args)
+    _c = 0
+    break_loop = False
+
+    # 2. loop through filepaths of color image ---------------------------------
+    while not break_loop:
+
+        filepaths = sorted([os.path.join(base_path, i)
+                            for i in os.listdir(base_path)])
+
+        for color_filepath in filepaths:
+
+            _c += 1
+
+            skel_filepath, _ = os.path.split(color_filepath)
+            skel_filepath = os.path.join(os.path.split(skel_filepath)[0],
+                                         'skeleton')
+
+            # 3. infer pose ----------------------------------------------------
+            infer_out = extract_2dskeletons(args=args,
+                                            pose_extractor=PE,
+                                            color_src=color_filepath,
+                                            skeleton_folder=skel_filepath,
+                                            enable_timer=enable_timer)
+
+            status = PE.display(win_name='000',
+                                speed=display_speed,
+                                scale=args.op_display)
+
+            if not status[0]:
+                break_loop = True
+
+            # 4. printout ------------------------------------------------------
+            if _c % 100 == 0:
+                infer_time = infer_out['infer_time']+1e-8
+                prep_time = infer_out['data_prep_time']+1e-8
+                filered_skel = PE.pyop.filtered_skel
+                print(
+                    f"Image : {color_filepath.split('/')[-1]} | "
+                    f"#Skel filtered : {filered_skel} | "
+                    f"Prep time : {prep_time:.3f} | "
+                    f"Pose time : {infer_time:.3f}"
+                )
+
+            if break_loop:
+                break
+
+
+def extract_2dskeletons_offline(args: argparse.Namespace):
+    """Runs openpose inference in offline mode.
+
+    Reads image files under the `color_image` arg and extracts pose
+    from the images using openpose.
+
+    Args:
+        args (argparse.Namespace): CLI arguments
+    """
+
+    assert os.path.isdir(args.op_input_color_image), \
+        f'{args.op_input_color_image} does not exist...'
+
+    base_path = args.op_input_color_image
+    filepaths = sorted([os.path.join(base_path, i)
+                        for i in os.listdir(base_path)])
+
+    # For cv.imshow
+    display_speed = 1
+
+    # Runtime logging
+    enable_timer = True
+    runtime = {'PE': [], 'TK': []}
+
+    # 1. initialize class ------------------------------------------------------
+    PE = OpenPosePoseExtractor(args)
+
+    # 2. loop through filepaths of color image ---------------------------------
+    _c = 0
+    tqdm_bar = tqdm(filepaths, dynamic_ncols=True)
+    break_loop = False
+    data_len = len(filepaths)
+    for idx, color_filepath in enumerate(tqdm_bar):
+
+        if idx + 1 == data_len:
+            break_loop = True
+
+        if idx == 15:
+            runtime = {'PE': [], 'TK': []}
+
+        skel_filepath, _ = os.path.split(color_filepath)
+        skel_filepath = os.path.join(os.path.split(skel_filepath)[0],
+                                     'skeleton')
+
+        # 3. infer pose --------------------------------------------------------
+        infer_out = extract_2dskeletons(args=args,
+                                        pose_extractor=PE,
+                                        color_src=color_filepath,
+                                        skeleton_folder=skel_filepath,
+                                        enable_timer=enable_timer)
+
+        status = PE.display(win_name='000',
+                            speed=display_speed,
+                            scale=args.op_display)
+
+        if not status[0]:
+            break_loop = True
+
+        # 4. printout ----------------------------------------------------------
+        infer_time = infer_out['infer_time']+1e-8
+        prep_time = infer_out['data_prep_time']+1e-8
+        filered_skel = PE.pyop.filtered_skel
+        runtime['PE'].append(1/infer_time)
+        tqdm_bar.set_description(
+            f"Image : {color_filepath.split('/')[-1]} | "
+            f"#Skel filtered : {filered_skel} | "
+            f"Prep time : {prep_time:.3f} | "
+            f"Pose time : {infer_time:.3f} | "
+            f"FPS PE : {sum(runtime['PE'])/len(runtime['PE']):.3f}"
+        )
+
+        if break_loop:
+            break
+
+
 def extract_2dskeletons_and_track_offline(args: argparse.Namespace):
     """Runs openpose inference and tracking in offline mode.
 
@@ -282,7 +427,7 @@ def extract_2dskeletons_and_track_offline(args: argparse.Namespace):
         f'{args.op_input_color_image} does not exist...'
 
     base_path = args.op_input_color_image
-    filepaths = sorted([os.path.join(base_path, f"{i:0>20}")
+    filepaths = sorted([os.path.join(base_path, i)
                         for i in os.listdir(base_path)])
 
     # Delay = predict and no update in tracker
@@ -322,10 +467,9 @@ def extract_2dskeletons_and_track_offline(args: argparse.Namespace):
         #     _c += 1
         #     continue
 
-        skel_filepath, skel_prefix = os.path.split(color_filepath)
+        skel_filepath, _ = os.path.split(color_filepath)
         skel_filepath = os.path.join(os.path.split(skel_filepath)[0],
                                      'skeleton')
-        skel_prefix = os.path.splitext(skel_prefix)[0]
 
         # 3. track without pose extraction -----------------------------
         if delay_counter > 0:
@@ -376,13 +520,54 @@ def extract_2dskeletons_and_track_offline(args: argparse.Namespace):
             break
 
 
+def compare_tracker(arg_op: argparse.Namespace):
+
+    extract_skel_func = extract_2dskeletons_and_track_offline
+
+    arg_op.op_input_color_image = "data/mot17/dev1/100/color"
+    arg_op.op_save_track_image = False
+
+    # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_deepsort")
+    # arg_op.op_track_deepsort = True
+    # arg_op.op_heatmaps_add_PAFs = True
+    # arg_op.op_heatmaps_add_bkg = True
+    # arg_op.op_heatmaps_add_parts = True
+    # extract_skel_func(arg_op)
+    # arg_op.op_track_deepsort = False
+    # arg_op.op_heatmaps_add_PAFs = False
+    # arg_op.op_heatmaps_add_bkg = False
+    # arg_op.op_heatmaps_add_parts = False
+
+    # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_bytetrack")
+    # arg_op.op_track_bytetrack = True
+    # extract_skel_func(arg_op)
+    # arg_op.op_track_bytetrack = False
+
+    # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_ocsort")
+    # arg_op.op_track_ocsort = True
+    # extract_skel_func(arg_op)
+    # arg_op.op_track_ocsort = False
+
+    print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_strongsort")
+    arg_op.op_track_strongsort = True
+    arg_op.op_heatmaps_add_PAFs = True
+    arg_op.op_heatmaps_add_bkg = True
+    arg_op.op_heatmaps_add_parts = True
+    extract_skel_func(arg_op)
+    arg_op.op_track_strongsort = False
+    arg_op.op_heatmaps_add_PAFs = False
+    arg_op.op_heatmaps_add_bkg = False
+    arg_op.op_heatmaps_add_parts = False
+
+
 if __name__ == "__main__":
 
     arg_op, _ = get_parser().parse_known_args()
 
-    if os.path.isdir(arg_op.op_input_color_image):
+    if (arg_op.op_track_deepsort or arg_op.op_track_bytetrack or
+            arg_op.op_track_ocsort or arg_op.op_track_strongsort):
         extract_2dskeletons_and_track_offline(arg_op)
-    else:
+    elif arg_op.op_mode == 'single':
         PE = OpenPosePoseExtractor(arg_op)
         enable_timer = True
         extract_2dskeletons(args=arg_op,
@@ -390,5 +575,13 @@ if __name__ == "__main__":
                             color_src=arg_op.op_input_color_image,
                             skeleton_folder=arg_op.op_save_skel_folder,
                             enable_timer=enable_timer)
+    elif arg_op.op_mode == 'online':
+        extract_2dskeletons_online(arg_op)
+    elif arg_op.op_mode == 'offline':
+        extract_2dskeletons_offline(arg_op)
+    elif arg_op.op_mode == 'comparetracker':
+        compare_tracker(arg_op)
+    else:
+        raise ValueError("Unknown op_mode")
 
     print(f"[INFO] : FINISHED")
