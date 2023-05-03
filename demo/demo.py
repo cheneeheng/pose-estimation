@@ -62,9 +62,8 @@ def get_op_args():
     args.op_image_width = 848
     args.op_image_height = 480
     # # For 3d skel extraction
-    args.op_patch_offset = 3
+    args.op_patch_offset = 5
     # # For 3d skel extraction
-    args.op_ntu_format = True
     # args.op_extract_3d_skel = False
     # args.op_save_3d_skel = False
     args.op_display = 1.0
@@ -72,7 +71,7 @@ def get_op_args():
     # For skel extraction/tracking in inference_rs.py
     args.op_rs_dir = "data/mot17"
     args.op_rs_delete_image = False
-    args.op_save_result_image = False
+    args.op_save_track_image = False
     args.op_proc = "sp"
     # args.op_track_deepsort = True
     args.op_track_bytetrack = True
@@ -108,7 +107,7 @@ def get_ar_args():
     parser.set_defaults(**{'config': config})
     args = load_parser_args_from_config(parser)
     args.weights = weights
-    args.max_frame = 100
+    args.max_frame = 50
     args.max_num_skeleton_true = 2
     args.max_num_skeleton = 4
     args.num_joint = 15
@@ -275,22 +274,22 @@ if __name__ == "__main__":
             #     display=rs_args.rs_display_frame,
             #     display_and_save_with_key=rs_args.rs_save_with_key
             # )
-            with Timer("update", enable_timer, False) as t:
+            with Timer("rsw", enable_timer, False) as t:
                 rsw.step(
                     display=0,
                     display_and_save_with_key=False,
-                    use_colorizer=True
+                    use_colorizer=False
                 )
             rs_time = t.duration
             color_image = rsw.frames[device_sn]['color_framedata']  # h,w,c
             depth_image = rsw.frames[device_sn]['depth_framedata']  # h,w
-            depth_colormap = rsw.frames[device_sn]['depth_color_framedata']
-            quit_key = visualize_rs(color_image=color_image,
-                                    depth_colormap=depth_colormap,
-                                    depth_scale=depth_scale,
-                                    winname=f'rs_{device_sn}')
-            if quit_key:
-                break
+            # depth_colormap = rsw.frames[device_sn]['depth_color_framedata']
+            # quit_key = visualize_rs(color_image=color_image,
+            #                         depth_colormap=depth_colormap,
+            #                         depth_scale=depth_scale,
+            #                         winname=f'rs_{device_sn}')
+            # if quit_key:
+            #     break
 
             # 6. track without pose extraction ---------------------------------
             if delay_counter > 0:
@@ -331,20 +330,25 @@ if __name__ == "__main__":
 
             # 8. action recognition --------------------------------------------
             if time.time() - ar_start_time > int(ar_args.interval):
-                with Timer("update", enable_timer, False) as t:
+                with Timer("AR", enable_timer, False) as t:
                     if len(skelstorage.skeletons) > 0:
                         # data  # M, 1, V, C
                         data = skelstorage.get_last_skel()
                         AR.append_data(data[:op_args.op_max_true_body,
                                             :,
-                                            :op_args.num_joint,
+                                            :ar_args.num_joint,
                                             :])
                         # logits = [#labels], prediction = from 0 - #labels-1
                         logits, prediction = AR.predict()
+                        if len(skelstorage.skeletons) < 2:
+                            logits = logits[:-3]
+                            prediction = logits.index(max(logits))
                         print(skelstorage.ids,
                               [round(i*100, 1) for i in logits],
                               MAPPING[prediction+1])
                     recog_time = t.duration
+                if recog_time is None:
+                    recog_time = -1
 
             # 8. printout ------------------------------------------------------
             if c % rs_args.rs_fps == 0:

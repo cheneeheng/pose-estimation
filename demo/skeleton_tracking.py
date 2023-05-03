@@ -32,7 +32,6 @@ if __name__ == "__main__":
     # # For 3d skel extraction
     # args.op_patch_offset = 2
     # # For 3d skel extraction
-    # args.op_ntu_format = False
     # args.op_extract_3d_skel = False
     # args.op_save_3d_skel = False
     args.op_display = 1.0
@@ -41,7 +40,7 @@ if __name__ == "__main__":
     args.op_rs_dir = "data/mot17"
     # args.op_rs_dir = "/data/realsense"
     args.op_rs_delete_image = False
-    args.op_save_result_image = False
+    args.op_save_track_image = False
     args.op_proc = "sp"
     # args.op_track_deepsort = True
     args.op_track_bytetrack = True
@@ -59,25 +58,25 @@ if __name__ == "__main__":
         print(f"{k} : {v}")
     print("========================================")
 
-    # # extract_skel_func = rs_extract_skeletons_and_track_offline_mp
-    # # extract_skel_func(arg_op)
-    # # arg_op.op_save_result_image = True
-    # # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_deepsort")
-    # # arg_op.op_track_deepsort = True
-    # # extract_skel_func(arg_op)
-    # # arg_op.op_track_deepsort = False
-    # # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_bytetrack")
-    # # arg_op.op_track_bytetrack = True
-    # # extract_skel_func(arg_op)
-    # # arg_op.op_track_bytetrack = False
-    # # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_ocsort")
-    # # arg_op.op_track_ocsort = True
-    # # extract_skel_func(arg_op)
-    # # arg_op.op_track_ocsort = False
-    # # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_strongsort")
-    # # arg_op.op_track_strongsort = True
-    # # extract_skel_func(arg_op)
-    # # arg_op.op_track_strongsort = False
+    # extract_skel_func = rs_extract_skeletons_and_track_offline_mp
+    # extract_skel_func(arg_op)
+    # arg_op.op_save_track_image = False
+    # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_deepsort")
+    # arg_op.op_track_deepsort = True
+    # extract_skel_func(arg_op)
+    # arg_op.op_track_deepsort = False
+    # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_bytetrack")
+    # arg_op.op_track_bytetrack = True
+    # extract_skel_func(arg_op)
+    # arg_op.op_track_bytetrack = False
+    # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_ocsort")
+    # arg_op.op_track_ocsort = True
+    # extract_skel_func(arg_op)
+    # arg_op.op_track_ocsort = False
+    # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_strongsort")
+    # arg_op.op_track_strongsort = True
+    # extract_skel_func(arg_op)
+    # arg_op.op_track_strongsort = False
 
     assert os.path.isdir(args.op_rs_dir), f'{args.op_rs_dir} does not exist...'
 
