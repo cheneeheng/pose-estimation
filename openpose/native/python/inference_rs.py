@@ -36,7 +36,7 @@ def rs_extract_skeletons_online_mp(args: argparse.Namespace):
     end_loop = False
 
     # Delay = predict and no update in tracker
-    delay_switch = 5
+    delay_switch = 0
     delay_counter = 0
 
     # For cv.imshow
@@ -247,7 +247,7 @@ def rs_extract_skeletons_and_track_online_mp(args: argparse.Namespace):
     end_loop = False
 
     # Delay = predict and no update in tracker
-    delay_switch = 5
+    delay_switch = 0
     delay_counter = 0
 
     # For cv.imshow
@@ -393,7 +393,7 @@ def rs_extract_skeletons_and_track_offline_mp(args: argparse.Namespace):
     dev_list = list(dev_trial_color_dir.keys())
 
     # Delay = predict and no update in tracker
-    delay_switch = 5
+    delay_switch = 0
     delay_counter = 0
 
     # For cv.imshow

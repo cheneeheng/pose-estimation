@@ -95,7 +95,6 @@ if __name__ == "__main__":
                                 arg_op.op_skel_thres,
                                 arg_op.op_max_true_body,
                                 arg_op.op_patch_offset)
-        pyop.initialize()
 
     # REALSENSE
     rsw = initialize_rs_devices(arg_rs, OpenposeStoragePaths)

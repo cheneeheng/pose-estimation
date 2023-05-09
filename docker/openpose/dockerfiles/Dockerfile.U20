@@ -65,7 +65,7 @@ RUN python3 -m pip install -r /tmp/requirements/main.txt && \
 # and : https://hub.docker.com/r/cwaffles/openpose
 RUN git clone https://github.com/cheneeheng/openpose.git /usr/local/src/openpose
 WORKDIR /usr/local/src/openpose/build
-# Default for cuda11+cudnn8 (frontend flag is for cudnn8)
+# Default for cuda11+cudnn8 (frontend flag is for cudnn9)
 # 7.5 = for turing architecture
 RUN cmake \
     -DDOWNLOAD_BODY_25_MODEL:BOOL=ON \

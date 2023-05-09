@@ -23,7 +23,6 @@ if __name__ == "__main__":
     params["net_resolution"] = "-1x368"
 
     pyop = PyOpenPoseNative(params)
-    pyop.initialize()
 
     for clip_id in sorted(os.listdir(CLIPS_PATH))[int(sys.argv[1]):int(sys.argv[2])]:  # noqa
         # for clip_id in sorted(os.listdir(CLIPS_PATH))[549:550]:

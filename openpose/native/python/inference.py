@@ -31,10 +31,12 @@ class ExtractSkeletonAndTrack:
         self.enable_timer = enable_timer
 
         if args.op_proc == 'mp':
-            self.infer_queue = mp.Queue(maxsize=10)
-            self.track_queue = mp.Queue(maxsize=10)
-            self.write_queue = mp.Queue(maxsize=10)
-            self.final_queue = mp.Queue(maxsize=10)
+            raise ValueError("mp not supported for now, openpose inference "
+                             "seems to cause the mp to hang.")
+            # self.infer_queue = mp.Queue(maxsize=10)
+            # self.track_queue = mp.Queue(maxsize=10)
+            # self.write_queue = mp.Queue(maxsize=10)
+            # self.final_queue = mp.Queue(maxsize=10)
         else:
             self.infer_queue = Queue(maxsize=10)
             self.track_queue = Queue(maxsize=10)
@@ -43,9 +45,20 @@ class ExtractSkeletonAndTrack:
 
     def start(self):
         if self.args.op_proc == 'mp':
-            self.p_extract = Thread(target=self.extract_skeletons, args=())
-            self.p_track = mp.Process(target=self.track, args=())
-            self.p_write = mp.Process(target=self.writeout, args=())
+            raise ValueError("mp not supported for now, openpose inference "
+                             "seems to cause the mp to hang.")
+            # self.p_extract = mp.Process(
+            #     target=self.extract_skeletons,
+            #     args=(self.infer_queue, self.track_queue)
+            # )
+            # self.p_track = mp.Process(
+            #     target=self.track,
+            #     args=(self.track_queue, self.write_queue)
+            # )
+            # self.p_write = mp.Process(
+            #     target=self.writeout,
+            #     args=(self.write_queue, self.final_queue)
+            # )
         else:
             self.p_extract = Thread(target=self.extract_skeletons, args=())
             self.p_track = Thread(target=self.track, args=())
@@ -119,13 +132,13 @@ class ExtractSkeletonAndTrack:
                                   self.args.op_image_height)
                     self.TK.update(boxes, scores, keypoints, heatmaps, image_size)  # noqa
                 if self.args.op_save_track_image:
-                    img = PYOP._draw_skeleton_text_image(img, scores)
-                    img = PYOP._draw_bounding_box_tracking_image(img, self.TK.tracks)  # noqa
+                    img = PYOP._draw_text_on_skeleton_image(img, scores)
+                    img = PYOP._draw_tracking_bounding_box_image(img, self.TK.tracks)  # noqa
                 duration = t.duration+1e-8
             else:
                 if self.args.op_save_track_image:
-                    img = PYOP._draw_skeleton_text_image(img, scores)
-                    img = PYOP._draw_skeleton_bounding_box_image(img, boxes)
+                    img = PYOP._draw_text_on_skeleton_image(img, scores)
+                    img = PYOP._draw_bounding_box_on_skeleton_image(img, boxes)
                 duration = -1
 
             self.write_queue.put((img, filered_skel, prep_time, infer_time,
@@ -538,26 +551,26 @@ def compare_tracker(arg_op: argparse.Namespace):
     # arg_op.op_heatmaps_add_bkg = False
     # arg_op.op_heatmaps_add_parts = False
 
-    # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_bytetrack")
-    # arg_op.op_track_bytetrack = True
-    # extract_skel_func(arg_op)
-    # arg_op.op_track_bytetrack = False
+    print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_bytetrack")
+    arg_op.op_track_bytetrack = True
+    extract_skel_func(arg_op)
+    arg_op.op_track_bytetrack = False
 
     # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_ocsort")
     # arg_op.op_track_ocsort = True
     # extract_skel_func(arg_op)
     # arg_op.op_track_ocsort = False
 
-    print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_strongsort")
-    arg_op.op_track_strongsort = True
-    arg_op.op_heatmaps_add_PAFs = True
-    arg_op.op_heatmaps_add_bkg = True
-    arg_op.op_heatmaps_add_parts = True
-    extract_skel_func(arg_op)
-    arg_op.op_track_strongsort = False
-    arg_op.op_heatmaps_add_PAFs = False
-    arg_op.op_heatmaps_add_bkg = False
-    arg_op.op_heatmaps_add_parts = False
+    # print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> op_track_strongsort")
+    # arg_op.op_track_strongsort = True
+    # arg_op.op_heatmaps_add_PAFs = True
+    # arg_op.op_heatmaps_add_bkg = True
+    # arg_op.op_heatmaps_add_parts = True
+    # extract_skel_func(arg_op)
+    # arg_op.op_track_strongsort = False
+    # arg_op.op_heatmaps_add_PAFs = False
+    # arg_op.op_heatmaps_add_bkg = False
+    # arg_op.op_heatmaps_add_parts = False
 
 
 if __name__ == "__main__":

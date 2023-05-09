@@ -28,7 +28,6 @@ def test_op_runtime():
                             skel_thres,
                             max_true_body,
                             patch_offset)
-    pyop.initialize()
 
     t_total = 0
     N = 500
