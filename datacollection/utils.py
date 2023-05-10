@@ -103,10 +103,12 @@ def extract_pose_from_heatmaps(base_path: str,
     for device in devices:
         for trial in trials:
 
-            path = f"/data/tmp/data/{device}/{trial}/skeleton_fromheatmap"
+            path = f"{device}/{trial}/skeleton_fromheatmap"
+            path = os.path.join(base_path, path)
             os.makedirs(path, exist_ok=True)
 
-            path = f"/data/tmp/data/{device}/{trial}/heatmap"
+            path = f"{device}/{trial}/heatmap"
+            path = os.path.join(base_path, path)
             hm_files = [os.path.join(path, i) for i in os.listdir(path)]
 
             for hm_file in hm_files:
@@ -162,14 +164,11 @@ def save_heatmaps(rs_args: argparse.Namespace,
 
         while True:
 
-            display = 0
-            use_colorizer = False
-
             start = time.time()
             RSW.step(
-                display=display,
+                display=0,
                 display_and_save_with_key=rs_args.rs_save_with_key,
-                use_colorizer=use_colorizer
+                use_colorizer=False
             )
 
             # images = [RSW.frames[device_sn]['color_framedata']
