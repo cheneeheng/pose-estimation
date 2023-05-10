@@ -4,7 +4,7 @@ import os
 import numpy as np
 import pyopenpose as op
 
-from typing import Optional, Union, List, Tuple
+from typing import Optional, Union, List, Tuple, Any
 from .utils import get_color
 
 
@@ -368,30 +368,36 @@ class PyOpenPoseNative(PyOpenPoseNativeBase):
             # params["heatmaps_add_PAFs"] = True
             # params["heatmaps_scale"] = 2
             # params["upsampling_ratio"] = 1  # for saving raw heatmaps
-        # params["render_pose"] = 0
-        self.params = params
 
-        # params["body"] = 1
-        # params["posenet_only"] = True
-        # # saves heatmaps in unscaled size. Not used if posenet_only=True
-        # # params["upsampling_ratio"] = 1
-        # params["custom_net_input_layer"] = ""
-        # params["custom_net_output_layer"] = "pool1_stage1"
-        # self.params = params
+        params["scale_number"] = 1
+        params["body"] = 1
+        params["posenet_only"] = False
+        params["custom_net_input_layer"] = ""
+        params["custom_net_output_layer"] = ""
+        self.params = params.copy()
 
-        # # get keypoints from heatmaps
-        # _params = params.copy()
-        # _params["body"] = 1  # 2 to Disable OP Network
-        # _params["posenet_only"] = False
-        # # saves heatmaps in unscaled size. Not used if posenet_only=True
-        # # params["upsampling_ratio"] = 0  # 0 rescales to input image size
-        # _params["custom_net_input_layer"] = "pool1_stage1"
-        # _params["custom_net_output_layer"] = ""
-        # self._params = _params
+        # Get heatmap from certain layer in caffe model
+        params["scale_number"] = 1
+        params["body"] = 1
+        params["posenet_only"] = True
+        # saves heatmaps in unscaled size. Not used if posenet_only=True
+        # params["upsampling_ratio"] = 1
+        params["custom_net_input_layer"] = ""
+        params["custom_net_output_layer"] = "pool2_stage1"
+        self.params_cout = params.copy()
+
+        # Get keypoints from heatmaps
+        params["scale_number"] = 1
+        params["body"] = 1  # 2 to Disable OP Network
+        params["posenet_only"] = False
+        # saves heatmaps in unscaled size. Not used if posenet_only=True
+        # params["upsampling_ratio"] = 0  # 0 rescales to input image size
+        params["custom_net_input_layer"] = "pool2_stage1"
+        params["custom_net_output_layer"] = ""
+        self.params_cin = params.copy()
 
         self.opWrapper = op.WrapperPython()
         self.opWrapper.configure(self.params)
-        self.opWrapper.start()
 
         # results
         self.filtered_skel = "0"
@@ -417,28 +423,37 @@ class PyOpenPoseNative(PyOpenPoseNativeBase):
             self._pose_empty = True
         return
 
-    # def predict(self, image: np.ndarray) -> None:
-    #     self.reset()
-    #     self.datum.cvInputData = image
-    #     self.configure(self.params)
-    #     self.opWrapper.emplaceAndPop(op.VectorDatum([self.datum]))
-    #     self.datum.poseRawHeatMaps.tofile("/tmp/dummy.float")
-    #     np.insert(self.datum.poseRawHeatMaps.reshape(-1),
-    #               [0, 0, 0, 0],
-    #               [self.datum.poseRawHeatMaps.ndim] +
-    #               list(self.datum.poseRawHeatMaps.shape)
-    #               ).tofile("/tmp/dummy.float")
+    def predict_hm(self,
+                   image: np.ndarray,
+                   hm_save_path: str) -> None:
+        self.reset()
+        self.datum.cvInputData = image
+        self.opWrapper.emplaceAndPop(op.VectorDatum([self.datum]))
+        os.makedirs(os.path.dirname(hm_save_path), exist_ok=True)
+        self.datum.poseRawHeatMaps[0].tofile(hm_save_path)
+        np.insert(self.datum.poseRawHeatMaps[0].reshape(-1),
+                  [0, 0, 0, 0, 0],
+                  [self.datum.poseRawHeatMaps[0].ndim] +
+                  list(self.datum.poseRawHeatMaps[0].shape)
+                  ).tofile(hm_save_path)
+        if self.datum.poseScores is None:
+            self._pose_empty = True
+        return
 
-    #     hm = np.fromfile("/tmp/dummy.float", np.float32)
-    #     self.datum.customInputNetData = [hm[4:].reshape(
-    #         1, int(hm[1]), int(hm[2]), int(hm[3]))]
-    #     self.configure(self._params)
-    #     self.opWrapper.emplaceAndPop(op.VectorDatum([self.datum]))
-    #     self.datum.customInputNetData = []
+    def predict_from_hm(self,
+                        image: np.ndarray,
+                        heatmap: Optional[List[np.ndarray]] = None,
+                        kpt_save_path: Optional[str] = None,) -> None:
+        self.reset()
+        self.datum.cvInputData = image
+        self.datum.customInputNetData = heatmap
+        # self.configure(self.params_cin)
+        self.opWrapper.emplaceAndPop(op.VectorDatum([self.datum]))
+        self.datum.customInputNetData = []
 
-    #     if self.datum.poseScores is None:
-    #         self._pose_empty = True
-    #     return
+        if self.datum.poseScores is None:
+            self._pose_empty = True
+        return
 
     def filter_prediction(self) -> None:
         # 1. Empty array if scores is None (no skeleton at all)
@@ -489,6 +504,7 @@ class OpenPosePoseExtractor:
                 heatmaps_add_bkg=args.op_heatmaps_add_bkg,
                 heatmaps_add_PAFs=args.op_heatmaps_add_PAFs,
                 heatmaps_scale=args.op_heatmaps_scale,
+                render_pose=-1 if args.op_display > 0 else 0,
             ),
             args.op_skel_thres,
             args.op_max_true_body,
@@ -506,7 +522,20 @@ class OpenPosePoseExtractor:
             self.pyop.save_pose_keypoints(kpt_save_path)
         if skel_image_save_path is not None:
             self.pyop.save_skeleton_image(skel_image_save_path, depth)
-        # print(f"[INFO] : Openpose output saved in {kpt_save_path}")
+
+    def predict_hm(self,
+                   image: np.ndarray,
+                   hm_save_path: str) -> None:
+        self.pyop.predict_hm(image, hm_save_path)
+
+    def predict_from_hm(self,
+                        image: np.ndarray,
+                        heatmap: Optional[List[np.ndarray]] = None,
+                        kpt_save_path: Optional[str] = None) -> None:
+        self.pyop.predict_from_hm(image, heatmap, kpt_save_path)
+        self.pyop.filter_prediction()
+        if kpt_save_path is not None:
+            self.pyop.save_pose_keypoints(kpt_save_path)
 
     def predict_3d(self,
                    image: np.ndarray,
