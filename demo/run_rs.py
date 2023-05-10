@@ -97,7 +97,7 @@ if __name__ == "__main__":
                 continue
 
             c += 1
-            if c > args.rs_fps * args.rs_steps or c > max_c:
+            if c > args.rs_steps or c > max_c:
                 break
 
     except Exception as e:

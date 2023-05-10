@@ -383,7 +383,7 @@ class PyOpenPoseNative(PyOpenPoseNativeBase):
         # saves heatmaps in unscaled size. Not used if posenet_only=True
         # params["upsampling_ratio"] = 1
         params["custom_net_input_layer"] = ""
-        params["custom_net_output_layer"] = "pool2_stage1"
+        params["custom_net_output_layer"] = "pool3_stage1"
         self.params_cout = params.copy()
 
         # Get keypoints from heatmaps
@@ -392,7 +392,7 @@ class PyOpenPoseNative(PyOpenPoseNativeBase):
         params["posenet_only"] = False
         # saves heatmaps in unscaled size. Not used if posenet_only=True
         # params["upsampling_ratio"] = 0  # 0 rescales to input image size
-        params["custom_net_input_layer"] = "pool2_stage1"
+        params["custom_net_input_layer"] = "pool3_stage1"
         params["custom_net_output_layer"] = ""
         self.params_cin = params.copy()
 
@@ -442,8 +442,7 @@ class PyOpenPoseNative(PyOpenPoseNativeBase):
 
     def predict_from_hm(self,
                         image: np.ndarray,
-                        heatmap: Optional[List[np.ndarray]] = None,
-                        kpt_save_path: Optional[str] = None,) -> None:
+                        heatmap: Optional[List[np.ndarray]] = None,) -> None:
         self.reset()
         self.datum.cvInputData = image
         self.datum.customInputNetData = heatmap
@@ -532,7 +531,7 @@ class OpenPosePoseExtractor:
                         image: np.ndarray,
                         heatmap: Optional[List[np.ndarray]] = None,
                         kpt_save_path: Optional[str] = None) -> None:
-        self.pyop.predict_from_hm(image, heatmap, kpt_save_path)
+        self.pyop.predict_from_hm(image, heatmap)
         self.pyop.filter_prediction()
         if kpt_save_path is not None:
             self.pyop.save_pose_keypoints(kpt_save_path)
