@@ -86,6 +86,6 @@ if __name__ == "__main__":
     if args.extract_pose:
         extract_pose_from_heatmaps(rs_args.rs_save_path, op_args)
     elif args.save_heatmaps:
-        save_heatmaps(rs_args.rs_save_path, rs_args, op_args)
+        save_heatmaps(rs_args, op_args)
     else:
         raise ValueError("No arg given...")
