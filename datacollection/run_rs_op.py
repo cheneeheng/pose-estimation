@@ -1,25 +1,13 @@
 import argparse
-import os
-import time
-import traceback
-import sys
-import numpy as np
-from queue import Queue
-from threading import Thread
 
-from datacollection.utils import PoseExtractionMultithreading as MPPE
-from datacollection.utils import PoseHeatMapExtractionMultithreading as MPPEHM
 from datacollection.utils import extract_pose_from_heatmaps
 from datacollection.utils import save_heatmaps
 
 from openpose.native.python.utils import str2bool
 
 from rs_py.rs_run_devices import get_rs_parser
-from rs_py.rs_run_devices import printout
-from rs_py.rs_run_devices import RealsenseWrapper
 
 from openpose.native.python.args import get_parser as get_op_parser
-from openpose.native.python.skeleton import OpenPosePoseExtractor
 
 
 def get_rs_args():
@@ -90,7 +78,7 @@ if __name__ == "__main__":
                    type=str2bool,
                    default=False,
                    help='')
-    args, _ = get_rs_parser().parse_known_args()
+    args, _ = p.parse_known_args()
 
     rs_args = get_rs_args()
     op_args = get_op_args()

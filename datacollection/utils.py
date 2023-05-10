@@ -7,11 +7,9 @@ import numpy as np
 from queue import Queue
 from threading import Thread
 
-from rs_py.rs_run_devices import get_rs_parser
 from rs_py.rs_run_devices import printout
 from rs_py.rs_run_devices import RealsenseWrapper
 
-from openpose.native.python.args import get_parser as get_op_parser
 from openpose.native.python.skeleton import OpenPosePoseExtractor
 
 
