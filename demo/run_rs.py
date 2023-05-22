@@ -10,24 +10,26 @@ from rs_py.rs_run_devices import RealsenseWrapper
 
 if __name__ == "__main__":
     args, remain_args = get_rs_parser().parse_known_args()
-    args.rs_steps = 60
-    args.rs_fps = 30
+    args.rs_steps = 900
+    args.rs_fps = 15
     args.rs_image_width = 848
     args.rs_image_height = 480
     # args.rs_color_format = rs.format.bgr8
     # args.rs_depth_format = rs.format.z16
     args.rs_display_frame = 1
-    args.rs_save_with_key = False
-    args.rs_save_data = True
-    args.rs_save_path = '/data/realsense'
-    args.rs_use_one_dev_only = False
-    args.rs_dev = None
-    args.rs_ip = None
-    args.rs_verbose = False
-    args.rs_autoexposure = True
-    args.rs_depth_sensor_autoexposure_limit = 200000.0
+    # args.rs_save_with_key = False
+    # args.rs_save_data = True
+    # args.rs_save_path = '/data/realsense_230522'
+    # args.rs_use_one_dev_only = False
+    # args.rs_dev = None
+    # args.rs_ip = None
+    # args.rs_verbose = False
+    # args.rs_autoexposure = True
+    # args.rs_depth_sensor_autoexposure_limit = 200000.0
     args.rs_enable_ir_emitter = True
-    args.rs_ir_emitter_power = 290
+    args.rs_ir_emitter_power = 300
+    # args.rs_postprocess = True  # max fps ~25 for 1280x720
+    # args.rs_vertical = True
 
     print("========================================")
     print(">>>>> args <<<<<")
@@ -61,12 +63,8 @@ if __name__ == "__main__":
 
         while True:
 
-            if c % (args.rs_fps//1) == 0:
-                display = args.rs_display_frame
-                use_colorizer = True
-            else:
-                display = 0
-                use_colorizer = False
+            display = args.rs_display_frame
+            use_colorizer = True
 
             start = time.time()
             rsw.step(

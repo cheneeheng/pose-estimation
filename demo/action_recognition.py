@@ -4,12 +4,15 @@ import json
 import numpy as np
 import os
 import time
+import matplotlib.pyplot as plt
 
 from infer.inference import ActionRecognition
 
 from utils.parser import get_parser as get_default_parser
 from utils.parser import load_parser_args_from_config
 from utils.utils import init_seed
+from utils.visualization import visualize_3dskeleton_in_matplotlib
+from utils.visualization import visualize_3dskeleton_in_matplotlib_step
 
 
 if __name__ == '__main__':
@@ -17,20 +20,24 @@ if __name__ == '__main__':
     init_seed(1)
 
     # Parse args ---------------------------------------------------------------
+    data_path = "/data/07_AAGCN/data_tmp/S003C001P018R001A008_15j"
     # data_path = "/data/07_AAGCN/data_tmp/S003C001P018R001A009_15j"
     # data_path = "/data/07_AAGCN/data_tmp/S003C001P018R001A027_15j"
     # data_path = "/data/07_AAGCN/data_tmp/S003C001P018R001A031_15j"
     # data_path = "/data/07_AAGCN/data_tmp/S003C001P002R001A031_15j"
-    data_path = "/data/07_AAGCN/data_tmp/S003C001P018R001A043_15j"
+    # data_path = "/data/07_AAGCN/data_tmp/S003C001P018R001A043_15j"
     # data_path = "/data/07_AAGCN/data_tmp/S003C001P018R001A056_15j"
     # label_mapping_file = "/data/07_AAGCN/model/ntu_15j/index_to_name.json"
-    label_mapping_file = "/data/07_AAGCN/model/ntu_15j_9l/index_to_name.json"
+    # label_mapping_file = "/data/07_AAGCN/model/ntu_15j_9l/index_to_name.json"
+    label_mapping_file = "/data/07_AAGCN/model/ntu_15j_5l/index_to_name.json"
     # weights = "/data/07_AAGCN/data/openpose_b25_j15_ntu_result/xview/aagcn_preprocess_sgn_model/230414100001/weight/SGN-116-68208.pt"  # noqa
-    weights = "/data/07_AAGCN/data/openpose_b25_j15_9l_ntu_result/xview/aagcn_preprocess_sgn_model/230414100001/weight/SGN-110-10670.pt"  # noqa
+    # weights = "/data/07_AAGCN/data/openpose_b25_j15_9l_ntu_result/xview/aagcn_preprocess_sgn_model/230414100001/weight/SGN-110-10670.pt"  # noqa
+    weights = "/data/07_AAGCN/data/openpose_b25_j15_5l_ntu_result/xview/aagcn_preprocess_sgn_model/230510103001/weight/SGN-100-6800.pt"  # noqa
     # weights = "/data/07_AAGCN/data/openpose_b25_j15_ntu_result/xview/aagcn_joint/230414100001/weight/Model-50-29400.pt"  # noqa
     # weights = "/data/07_AAGCN/data/openpose_b25_j15_9l_ntu_result/xview/aagcn_joint/230414100001/weight/Model-50-4850.pt"  # noqa
     # config = "/data/07_AAGCN/data/openpose_b25_j15_ntu_result/xview/aagcn_preprocess_sgn_model/230414100001/config.yaml"  # noqa
-    config = "/data/07_AAGCN/data/openpose_b25_j15_9l_ntu_result/xview/aagcn_preprocess_sgn_model/230414100001/config.yaml"  # noqa
+    # config = "/data/07_AAGCN/data/openpose_b25_j15_9l_ntu_result/xview/aagcn_preprocess_sgn_model/230414100001/config.yaml"  # noqa
+    config = "/data/07_AAGCN/data/openpose_b25_j15_5l_ntu_result/xview/aagcn_preprocess_sgn_model/230510103001/config.yaml"  # noqa
     # config = "/data/07_AAGCN/data/openpose_b25_j15_ntu_result/xview/aagcn_joint/230414100001/config.yaml"  # noqa
     # config = "/data/07_AAGCN/data/openpose_b25_j15_9l_ntu_result/xview/aagcn_joint/230414100001/config.yaml"  # noqa
     parser = get_default_parser()
@@ -71,6 +78,9 @@ if __name__ == '__main__':
     infer_flag = False
 
     last_skel_file = None
+
+    fig = plt.figure(figsize=(16, 8))
+    pose, edge = None, None
 
     print("Start loop...")
     while True:
@@ -133,5 +143,28 @@ if __name__ == '__main__':
                 print(f"{skel_file} , "
                       f"{preds+1} , {logits[preds]:.2f} , "
                       f"{MAPPING[preds+1]}")
+
+            data = data.transpose(3, 1, 2, 0)  # C, 1, V, M
+            if pose is None:
+                pose, edge, fig = visualize_3dskeleton_in_matplotlib(
+                    data=np.expand_dims(data, axis=0),
+                    graph='graph.openpose_b25_j15.Graph',
+                    is_3d=True,
+                    speed=1e-8,
+                    text_per_t=[['FRAME:'] + [idx]],
+                    fig=fig,
+                    mode='openpose'
+                )
+            else:
+                visualize_3dskeleton_in_matplotlib_step(
+                    data=np.expand_dims(data, axis=0),
+                    t=0,
+                    pose=pose,
+                    edge=edge,
+                    is_3d=True,
+                    speed=1e-8,
+                    text_per_t=[['FRAME:'] + [idx]],
+                    fig=fig
+                )
 
         break
