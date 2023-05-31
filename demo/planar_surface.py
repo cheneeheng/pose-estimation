@@ -95,27 +95,71 @@ VERTICAL = False
 # #  [ 0.08064464  0.90048104  0.42735271]
 # #  [-0.0181342  -0.42735271  0.9039031 ]]
 
-BASE_PATH = '/data/realsense_230522/001622070408/230522131609/'
+# BASE_PATH = '/data/realsense_230522/001622070408/230522164119/'
+# ca = f'{BASE_PATH}/calib/dev001622070408_calib.json'
+# cf = f'{BASE_PATH}/color/1684766493048129434.npy'
+# df = f'{BASE_PATH}/depth/1684766493048129434.npy'
+# CROP_H = [130, -150]
+# CROP_W = [550, -1]
+# SUBSAMPLE_RAW_DATA = 10
+# SUBSAMPLE_ROT_DATA = 10
+# Z_VAL_FILTER = 3500
+# X_OFFSET = -1600
+# Y_OFFSET = -1000
+# Z_OFFSET = 1500
+# VERTICAL = False
+# Plane(point=Point([1382.65052154,  -46.48189615, 2258.12671717]),
+#       normal=Vector([ 0.94567705, -0.01504597,  0.32475919]))
+# [-0.32475919  0.          0.94567705] 1.585842865928153
+# [[ 0.09203368 -0.94567705 -0.31180878]
+#  [ 0.94567705 -0.01504597  0.32475919]
+#  [-0.31180878 -0.32475919  0.89292035]]
+
+# BASE_PATH = '/data/realsense_230523/001622070408/230523101302/'
+# ca = f'{BASE_PATH}/calib/dev001622070408_calib.json'
+# cf = f'{BASE_PATH}/color/1684829585599577116.npy'
+# df = f'{BASE_PATH}/depth/1684829585599577116.npy'
+# CROP_H = [200, -180]
+# CROP_W = [550, -1]
+# SUBSAMPLE_RAW_DATA = 10
+# SUBSAMPLE_ROT_DATA = 10
+# Z_VAL_FILTER = 3500
+# # X_OFFSET = -2200
+# # Y_OFFSET = -700
+# # Z_OFFSET = 0
+# X_OFFSET = -2200
+# Y_OFFSET = -700
+# Z_OFFSET = 0
+# VERTICAL = False
+# # Plane(point=Point([1386.13870592,   60.35210064, 2254.42350168]),
+# #       normal=Vector([ 0.9443577 , -0.0202894 ,  0.32829389]))
+# # [-0.32829389  0.          0.9443577 ] 1.591087123479195
+# # [[ 0.08971949 -0.9443577  -0.31644739]
+# #  [ 0.9443577  -0.0202894   0.32829389]
+# #  [-0.31644739 -0.32829389  0.88999111]]
+
+BASE_PATH = '/data/realsense_230531/001622070408/230531151854/'
 ca = f'{BASE_PATH}/calib/dev001622070408_calib.json'
-cf = f'{BASE_PATH}/color/1684754184417349503.npy'
-df = f'{BASE_PATH}/depth/1684754184417349503.npy'
-# cf = f'{BASE_PATH}/color/1684754179401573217.npy'
-# df = f'{BASE_PATH}/depth/1684754179401573217.npy'
-CROP_H = [250, -50]
-CROP_W = [480, -1]
-SUBSAMPLE_RAW_DATA = 10
+cf = f'{BASE_PATH}/color/1685539138629011904.npy'
+df = f'{BASE_PATH}/depth/1685539138629011904.npy'
+CROP_H = [200, -180]
+CROP_W = [550, -1]
+SUBSAMPLE_RAW_DATA = 1
 SUBSAMPLE_ROT_DATA = 10
 Z_VAL_FILTER = 3500
-X_OFFSET = -1200
-Y_OFFSET = -1500
+# X_OFFSET = -2200
+# Y_OFFSET = -700
+# Z_OFFSET = 0
+X_OFFSET = -2200
+Y_OFFSET = -700
 Z_OFFSET = 0
 VERTICAL = False
-# Plane(point=Point([1218.10372916,  545.81329237, 2256.30455221]),
-#       normal=Vector([0.91618354, 0.00155602, 0.4007559 ]))
-# [-0.4007559   0.          0.91618354] 1.5692403072442744
-# [[ 0.16191179 -0.91618354 -0.36659553]
-#  [ 0.91618354  0.00155602  0.4007559 ]
-#  [-0.36659553 -0.4007559   0.83964422]]
+# Plane(point=Point([1394.538405  ,   60.69744184, 2268.97181818]),
+#       normal=Vector([ 0.94602187, -0.01580074,  0.32371742]))
+# [-0.32371742  0.          0.94602187] 1.5865977250406023
+# [[ 0.09067461 -0.94602187 -0.31116032]
+#  [ 0.94602187 -0.01580074  0.32371742]
+#  [-0.31116032 -0.32371742  0.89352464]]
 
 # Read data and convert depth --------------------------------------------------
 with open(ca) as f:
@@ -207,12 +251,17 @@ print(plane)
 print(axis, angle)
 print(matrix_z)
 
+# sheer_h = np.eye(3)
+# sheer_h[0, 2] = 0.0
+# sheer_h[1, 2] = 0.0
+# print(sheer_h)
+
 data_rot = np.stack(
     [x3d_mm, y3d_mm, z3d_mm], axis=-1).reshape(-1, 3)[::SUBSAMPLE_ROT_DATA]
 data_rot += np.array([X_OFFSET, Y_OFFSET, Z_OFFSET])
 data_rot = (matrix_z@data_rot.transpose()).transpose()
-data_rot[:, 0] *= -1
-data_rot[:, 1] *= -1
+# data_rot[:, 0] *= -1
+# data_rot[:, 1] *= -1
 color_data = np.flip(color_image.reshape(-1, 3), axis=-1)[::SUBSAMPLE_ROT_DATA]
 color_data = color_data[data_rot[:, 2] < 5000]
 data_rot = data_rot[data_rot[:, 2] < 5000]

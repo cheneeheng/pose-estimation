@@ -3,13 +3,12 @@ import json
 import numpy as np
 import os
 import time
+import traceback
 import sys
-from functools import partial
+from time import gmtime, strftime
 
-import torch
-from torch.nn import functional as F
+from typing import Callable, Tuple, Optional
 
-from rs_py import rs
 from rs_py.rs_run_devices import get_rs_parser
 from rs_py.rs_run_devices import printout
 from rs_py.rs_run_devices import RealsenseWrapper
@@ -24,19 +23,449 @@ from infer.inference import ActionRecognition
 from utils.parser import get_parser as get_ar_parser
 from utils.parser import load_parser_args_from_config
 from utils.utils import init_seed
+from utils.visualization import visualize_3dskeleton_in_matplotlib
+from utils.visualization import visualize_3dskeleton_in_matplotlib_step
+
+FPS = 15
+CAMERA_W = 848
+CAMERA_H = 480
+
+FIG, POSE, EDGE = None, None, None
+MATPLOT = False
+
+# # # cannot import this with opencv
+# # # https://github.com/fourMs/MGT-python/issues/200
+# import matplotlib.pyplot as plt
+# FIG = plt.figure(figsize=(16, 8))
+# MATPLOT = True
+
+# OUTPUT_VIDEO = cv2.VideoWriter(
+#     'project.avi',
+#     cv2.VideoWriter_fourcc(*'DIVX'),
+#     15,
+#     (640, 480)
+# )
+OUTPUT_VIDEO = None
 
 
-def get_rs_args():
+class Config():
+    def __init__(self) -> None:
+        # args
+        self.args_rs = None
+        self.args_op = None
+        self.args_ar = None
+        # Delay = predict and no update in tracker
+        self.delay_switch = 0
+        self.delay_counter = 0
+        # For cv.imshow
+        self.display_speed = 1
+        # Runtime logging
+        self.enable_timer = True
+        self.fps = {'PE': [], 'TK': []}
+        self.infer_time = -1
+        self.track_time = -1
+        self.filered_skel = -1
+        self.prep_time = -1
+        self.recog_time = -1
+        self.rs_time = -1
+        # Storage --------------------------------------------------------------
+        # max length of data to store
+        self.MAX_STORAGE_LEN = 100
+        # buffer before removed
+        self.BUFFER = 30
+        # moving average and threshold for average
+        self.MOVING_AVG = 5
+        self.SCORE_THRES = 0.25
+        # Motion and action filtering
+        self.MOTION_DELAY = 3
+        self.MOTION_COUNT = 10
+        self.ACTION_COUNT = 5
+        self.MAY_YS_DELAY = 3
+        self.MAY_YS_COUNT = 10
+        # TextParser -----------------------------------------------------------
+        self.MOVE_THRES = 0.015
+        # ActionHistory --------------------------------------------------------
+        self.BOX_LEFT_OFFSET = 20
+        self.BOX_TOP_OFFSET = 20
+        self.BOX_HEIGHT = 14
+        self.BOX_WIDTH = 30
+        self.NUM_LB = 800//self.BOX_HEIGHT
+        self.LB_OFFSET = 20
+        # Rule based action ----------------------------------------------------
+        self.RULE_THRES_STAND = 0.05
+        self.RULE_THRES_STAND_LONG = 0.10
+        self.RULE_THRES_SIT = -0.03
+        self.RULE_THRES_SIT_LONG = -0.10
+        self.RULE_THRES_FALL = -0.10
+        self.RULE_THRES_FALL_HEIGHT = 1.25
+
+    @ property
+    def valid_joints(self):
+        assert self.args_ar is not None
+        if self.args_ar.num_joint == 11:
+            return [0, 1, 2, 3, 5, 6, 8, 9, 10, 12, 13]
+        else:
+            return [i for i in range(self.args_ar.num_joint)]
+
+
+class Storage():
+    def __init__(self, config: Config) -> None:
+        self.ids = []  # idx
+        self.raw_kypts = []  # idx, T, [V, 2]
+        self.avg_kypts = []  # idx, T, [V, 2]
+        self.raw_skels = []  # idx, T, [V, C]
+        self.avg_skels = []  # idx, T, [V, C]
+        self.raw_score = []  # idx, T, [V]
+        self.avg_score = []  # idx, T, [V]
+        # self.max__y = []  # idx, T
+        # self.height = []  # idx, T
+        # self.motion = []  # idx, [1] , experimental
+        self.action = []  # T, [K] , experimental
+        self.counter = []  # idx
+        self.valid = []  # idx
+        # max length of data to store
+        self.max_len = config.MAX_STORAGE_LEN
+        # buffer before removed
+        self.buffer = config.BUFFER
+        # moving average and threshold for average
+        self.moving_avg = config.MOVING_AVG
+        self.score_thres = config.SCORE_THRES
+        # Motion and action filtering
+        self.motion_delay = config.MOTION_DELAY
+        self.motion_count = config.MOTION_COUNT
+        self.action_count = config.ACTION_COUNT
+        self.max_ys_delay = config.MAY_YS_DELAY
+        self.max_ys_count = config.MAY_YS_COUNT
+        self.max_yl_delay = config.MAY_YL_DELAY
+        self.max_yl_count = config.MAY_YL_COUNT
+
+    def _clip_and_append(self, x_list, new_ele):
+        return x_list[-self.max_len+1:] + [new_ele]
+
+    def _avg(self, sid):
+        # average of score
+        valid_mask = np.array(self.raw_score[sid][-self.moving_avg:]) < self.score_thres  # t,v  # noqa
+        valid_score = np.array(self.avg_score[sid][-self.moving_avg:])  # t,v
+        masked_score = np.ma.array(valid_score, mask=valid_mask)
+        self.avg_score[sid][-1] = np.mean(masked_score, axis=0).data
+        # average of kpts and skels
+        valid_kypts = np.array(self.avg_kypts[sid][-self.moving_avg:])  # t,v,c
+        valid_skels = np.array(self.avg_skels[sid][-self.moving_avg:])  # t,v,c
+        masked_kypts = np.ma.array(valid_kypts, mask=np.repeat(np.expand_dims(valid_mask, axis=-1), 2, axis=-1))  # noqa
+        masked_skels = np.ma.array(valid_skels, mask=np.repeat(np.expand_dims(valid_mask, axis=-1), 3, axis=-1))  # noqa
+        self.avg_kypts[sid][-1] = np.mean(masked_kypts, axis=0).data
+        self.avg_skels[sid][-1] = np.mean(masked_skels, axis=0).data
+
+    def _diff_calc(self, x, s, c, d, mode=0):
+        # y = mean(x[s>thres][-c:][:d] - x[s>thres][-c:][d:])
+        default = 0.0
+        if len(x) < 2:
+            return default
+        limit = len(x) - len(x)//2 if len(x) < c else d
+        data_ = x[-c:]  # t, V, C
+        valid = s[-c:] > self.score_thres  # t, V
+        diff = []
+        for m1, m2, v1, v2 in zip(data_[:limit], data_[limit:],
+                                  valid[:limit], valid[limit:]):
+            if (v1 & v2).sum() > 0:
+                if mode == 0:
+                    diff.append(np.nanmean(np.abs(m2[v1 & v2] -
+                                                  m1[v1 & v2])))
+                elif mode == 1:
+                    diff.append(np.nanmean(np.max(m2[:, 1][v1 & v2]) -
+                                           np.max(m1[:, 1][v1 & v2])))
+        return default if len(diff) == 0 else np.nanmean(diff)
+
+    def _motion_calc(self, skels, score):
+        return self._diff_calc(
+            skels, score, self.motion_count, self.motion_delay, 0)
+
+    def _max_dys_calc(self, skels, score):
+        return self._diff_calc(
+            skels, score, self.max_ys_count, self.max_ys_delay, 1)
+
+    def _max_dyl_calc(self, skels, score):
+        return self._diff_calc(
+            skels, score, self.max_yl_count, self.max_yl_delay, 1)
+
+    def add(self, track_id, keypoints, skeletons, scores):
+        if track_id in self.ids:
+            sid = self.ids.index(track_id)
+            self.raw_kypts[sid] = self._clip_and_append(self.raw_kypts[sid],
+                                                        keypoints)
+            self.raw_skels[sid] = self._clip_and_append(self.raw_skels[sid],
+                                                        skeletons)
+            self.raw_score[sid] = self._clip_and_append(self.raw_score[sid],
+                                                        scores)
+            self.avg_kypts[sid] = self._clip_and_append(self.avg_kypts[sid],
+                                                        keypoints)
+            self.avg_skels[sid] = self._clip_and_append(self.avg_skels[sid],
+                                                        skeletons)
+            self.avg_score[sid] = self._clip_and_append(self.avg_score[sid],
+                                                        scores)
+            self._avg(sid)
+            self.valid[sid] = True
+        else:
+            self.ids.append(track_id)
+            self.raw_kypts.append([keypoints])
+            self.avg_kypts.append([keypoints])
+            self.raw_skels.append([skeletons])
+            self.avg_skels.append([skeletons])
+            self.raw_score.append([scores])
+            self.avg_score.append([scores])
+            # self.max__y.append([skeletons[:, 1].max()])
+            # self.height.append([skeletons[:, 1].max() -
+            #                     skeletons[:, 1].min()])
+            # self.motion.append(-1.0)
+            self.counter.append(0)
+            self.valid.append(True)
+
+    def filter_action(self, logits, prediction):
+        # append, clip, avg
+        self.action.append(logits)
+        if len(self.action) > self.action_count:
+            self.action = self.action[-self.action_count:]
+            avg = np.nanmean(self.action, axis=0)
+            # self.action[-1] = avg
+            return np.argmax(avg)
+        else:
+            return prediction
+
+    def get_last_skel(self, max_body=None, valid_joints=None):
+        raw_kypts, avg_kypts = [], []
+        raw_skels, avg_skels = [], []
+        raw_score, avg_score = [], []
+        motion, max_dys, max_dyl = [], [], []
+        M = len(self.avg_skels)
+        for m in range(M):
+            raw_kypts_m = self.raw_kypts[m]
+            avg_kypts_m = self.avg_kypts[m]
+            raw_skels_m = self.raw_skels[m]
+            avg_skels_m = self.avg_skels[m]
+            raw_score_m = self.raw_score[m]
+            avg_score_m = self.avg_score[m]
+            if max_body is not None or valid_joints is not None:
+                raw_kypts_m = [i[valid_joints, :] for i in raw_kypts_m]
+                avg_kypts_m = [i[valid_joints, :] for i in avg_kypts_m]
+                raw_skels_m = [i[valid_joints, :] for i in raw_skels_m]
+                avg_skels_m = [i[valid_joints, :] for i in avg_skels_m]
+                raw_score_m = [i[valid_joints] for i in raw_score_m]
+                avg_score_m = [i[valid_joints] for i in avg_score_m]
+            _skels = np.array(avg_skels_m)
+            _score = np.array(raw_score_m)
+            motion.append([self._motion_calc(_skels, _score)])
+            max_dys.append([self._max_dys_calc(_skels, _score)])
+            max_dyl.append([self._max_dyl_calc(_skels, _score)])
+            raw_kypts.append([raw_kypts_m[-1]])
+            avg_kypts.append([avg_kypts_m[-1]])
+            raw_skels.append([raw_skels_m[-1]])
+            avg_skels.append([avg_skels_m[-1]])
+            raw_score.append([raw_score_m[-1]])
+            avg_score.append([avg_score_m[-1]])
+        motion = np.stack(motion, 0)
+        max_dys = np.stack(max_dys, 0)
+        max_dyl = np.stack(max_dyl, 0)
+        raw_kypts = np.stack(raw_kypts, 0)
+        avg_kypts = np.stack(avg_kypts, 0)
+        raw_skels = np.stack(raw_skels, 0)
+        avg_skels = np.stack(avg_skels, 0)
+        raw_score = np.stack(raw_score, 0)
+        avg_score = np.stack(avg_score, 0)
+        # M, 1, V, C x2
+        # M, 1, V, C x2
+        # M, 1, V x2
+        # M, 1 x2
+        return (raw_kypts, avg_kypts, raw_skels, avg_skels,
+                raw_score, avg_score, motion, max_dys, max_dyl)
+
+    def delete(self, idx):
+        self.ids.pop(idx)
+        self.raw_kypts.pop(idx)
+        self.avg_kypts.pop(idx)
+        self.raw_skels.pop(idx)
+        self.avg_skels.pop(idx)
+        self.raw_score.pop(idx)
+        self.avg_score.pop(idx)
+        # self.motion.pop(idx)
+        # self.max__y.pop(idx)
+        # self.height.pop(idx)
+        self.counter.pop(idx)
+        self.valid.pop(idx)
+
+    def check_valid_and_delete(self):
+        num_data = len(self.counter)
+        del_idx = []
+        for i in range(num_data):
+            if not self.valid[i]:
+                self.counter[i] += 1
+            if self.counter[i] > self.buffer:
+                del_idx.append(i)
+            self.valid[i] = False
+        for i in del_idx:
+            self.delete(i)
+
+    def reset(self):
+        num_data = len(self.counter)
+        for idx in range(num_data):
+            self.raw_kypts[idx] = self.raw_kypts[idx][-self.max_len//2:]
+            self.avg_kypts[idx] = self.avg_kypts[idx][-self.max_len//2:]
+            self.raw_skels[idx] = self.raw_skels[idx][-self.max_len//2:]
+            self.avg_skels[idx] = self.avg_skels[idx][-self.max_len//2:]
+            self.raw_score[idx] = self.raw_score[idx][-self.max_len//2:]
+            self.avg_score[idx] = self.avg_score[idx][-self.max_len//2:]
+            # self.motion[idx] = self.motion[idx][-self.motion_count:]
+            # self.max__y[idx] = self.max__y[idx][-self.max_len//2:]
+            # self.height[idx] = self.height[idx][-self.max_len//2:]
+
+
+class TextParser():
+    CM = {
+        "CYAN": (255, 255, 0),
+        "YELLOW": (0, 255, 255),
+        # https://colorcodes.io/red/comic-book-red-color-codes/
+        "RED": (36, 29, 237),
+        "GREEN": (0, 255, 0),
+        "GRAY": (140, 140, 140),
+    }
+
+    def __init__(self, config: Config, num_label=4, fps=15) -> None:
+        self.MOVE_THRES = config.MOVE_THRES
+        self.num_label = num_label
+        self.fps = fps
+        self.counter = [0 for _ in range(6)]
+        self.last_text_id = -1
+
+    def moving(self, movement):
+        return True if movement > self.MOVE_THRES else False
+
+    def text_parser(self, p_id, prediction, movement):
+        text = ""
+        if prediction < 0:
+            text = f"Nobody is around."
+            color = self.CM["YELLOW"]
+            text_id = 0
+        elif prediction == 0:
+            moving = self.moving(movement)
+            if moving:
+                text = f"Patient {p_id} is moving around."
+                color = self.CM["CYAN"]
+                text_id = 1
+                self.counter[1] += 1
+            else:
+                text = ""
+                # text = f"Patient {p_id} is not doing anything."
+                color = self.CM["GRAY"]
+                text_id = 2
+                self.counter[2] += 1
+        else:
+            # action shown for 3 s only.
+            if self.counter[prediction+2] >= self.fps*5:
+                return self.text_parser(p_id, prediction=0, movement=movement)
+            else:
+                if prediction == 1:
+                    text = f"Patient {p_id} is sitting down. It is ok."
+                    color = self.CM["GREEN"]
+                    text_id = 3
+                    self.counter[3] += 1
+                elif prediction == 2:
+                    text = f"Patient {p_id} is standing up. It is ok."
+                    color = self.CM["GREEN"]
+                    text_id = 4
+                    self.counter[4] += 1
+                elif prediction == 3:
+                    text = f"Patient {p_id} is falling down. HELP!!!"
+                    color = self.CM["RED"]
+                    text_id = 5
+                    self.counter[5] += 1
+                # else:
+                #     text = ""
+                #     color = self.CM["GRAY"]
+                #     text_id = 6
+
+        # Reset count
+        if text_id != self.last_text_id:
+            self.counter[self.last_text_id] = 0
+
+        self.last_text_id = text_id
+
+        return text_id, text, color
+
+
+class ActionHistory():
+    def __init__(self, config: Config) -> None:
+        self.BOX_LEFT_OFFSET = config.BOX_LEFT_OFFSET
+        self.BOX_TOP_OFFSET = config.BOX_TOP_OFFSET
+        self.BOX_HEIGHT = config.BOX_HEIGHT
+        self.BOX_WIDTH = config.BOX_WIDTH
+        self.NUM_LB = config.NUM_LB
+        self.LB_OFFSET = config.LB_OFFSET
+        self.label = []
+        self.time_list = []
+        self.color_list = []
+        self.text_list = []
+        self.image_memory = None
+
+    def step(self, color: tuple, text: str, text_id: int) -> np.ndarray:
+
+        if len(self.label) > 0:
+            if text_id == self.label[-1]:
+                return self.image_memory
+
+        self.label = self.label[-self.NUM_LB:] + [text_id]
+        self.time_list = self.time_list[-self.NUM_LB:] + \
+            [f'{strftime("%y%m%d%H%M%S", gmtime())} : ']
+        self.color_list = self.color_list[-self.NUM_LB:] + [color]
+        self.text_list = self.text_list[-self.NUM_LB:] + [text]
+
+        image = np.zeros((848, 480, 3), dtype=np.uint8)
+        for idx, lab in enumerate(self.label):
+            top = self.BOX_TOP_OFFSET+(self.BOX_HEIGHT*idx)
+            btm = self.BOX_TOP_OFFSET+(self.BOX_HEIGHT*(idx+1))
+            cv2.rectangle(image,
+                          (self.BOX_LEFT_OFFSET, top),
+                          (self.BOX_LEFT_OFFSET+self.BOX_WIDTH, btm),
+                          self.color_list[idx], -1)
+            _text = self.time_list[idx]
+            _text += self.text_list[idx]
+            image = cv2.putText(
+                image,
+                _text,
+                (self.BOX_LEFT_OFFSET+self.BOX_WIDTH+self.LB_OFFSET, btm),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.4,
+                self.color_list[idx],
+                1,
+                cv2.LINE_AA
+            )
+            # # ((32, 12), 5)
+            # # ((26, 9), 4)
+            # # ((20, 7), 3)
+            # print(cv2.getTextSize(strftime("%y-%m-%d %H:%M:%S",
+            #       gmtime()), cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1))
+            # cv2.circle(rect, (10, 10), 20, (255, 255, 255), -1)
+
+        # cv2.imshow("a", rect)
+        # cv2.waitKey(100)
+
+        self.image_memory = image
+        return image
+
+
+def get_args_rs():
     args, _ = get_rs_parser().parse_known_args()
     args.rs_steps = 1000
-    args.rs_fps = 30
+    args.rs_fps = FPS
+    args.rs_image_width = CAMERA_W
+    args.rs_image_height = CAMERA_H
     args.rs_ir_emitter_power = 290
     args.rs_display_frame = 1
     args.rs_save_with_key = False
     args.rs_save_data = False
     args.rs_save_path = ''
+    args.rs_postprocess = True  # max fps ~25 for 1280x720
+    args.rs_vertical = True
     print("========================================")
-    print(">>>>> rs_args <<<<<")
+    print(">>>>> args_rs <<<<<")
     print("========================================")
     for k, v in vars(args).items():
         print(f"{k} : {v}")
@@ -44,7 +473,7 @@ def get_rs_args():
     return args
 
 
-def get_op_args():
+def get_args_op():
     args, _ = get_op_parser().parse_known_args()
     args.op_model_folder = "/usr/local/src/openpose/models/"
     args.op_model_pose = "BODY_25"
@@ -59,10 +488,10 @@ def get_op_args():
     args.op_save_skel_image = False
     # For skel extraction/tracking in inference.py
     args.op_input_color_image = ""
-    args.op_image_width = 848
-    args.op_image_height = 480
+    args.op_image_width = CAMERA_W
+    args.op_image_height = CAMERA_H
     # # For 3d skel extraction
-    args.op_patch_offset = 5
+    args.op_patch_offset = 3
     # # For 3d skel extraction
     # args.op_extract_3d_skel = False
     # args.op_save_3d_skel = False
@@ -79,11 +508,12 @@ def get_op_args():
     # args.op_track_strongsort = True
     args.op_track_buffer = 30
     args.bytetracker_trackthresh = 0.25
-    args.bytetracker_trackbuffer = 30
-    args.bytetracker_matchthresh = 0.8
+    # args.bytetracker_trackbuffer = 30  # overwritten by op_track_buffer
+    args.bytetracker_matchthresh = 0.9
     args.bytetracker_mot20 = False
+    args.bytetracker_fps = FPS
     print("========================================")
-    print(">>>>> op_args <<<<<")
+    print(">>>>> args_op <<<<<")
     print("========================================")
     for k, v in vars(args).items():
         print(f"{k} : {v}")
@@ -91,26 +521,40 @@ def get_op_args():
     return args
 
 
-def get_ar_args():
+def get_args_ar():
     init_seed(1)
     # label_mapping_file = "/data/07_AAGCN/model/ntu_15j/index_to_name.json"
-    label_mapping_file = "/data/07_AAGCN/model/ntu_15j_9l/index_to_name.json"
+    # label_mapping_file = "/data/07_AAGCN/model/ntu_15j_9l/index_to_name.json"
+    # label_mapping_file = "/data/07_AAGCN/model/ntu_15j_5l/index_to_name.json"
+    label_mapping_file = "/data/07_AAGCN/model/ntu_15j_4l/index_to_name.json"
     # weights = "/data/07_AAGCN/data/openpose_b25_j15_ntu_result/xview/aagcn_preprocess_sgn_model/230414100001/weight/SGN-116-68208.pt"  # noqa
-    weights = "/data/07_AAGCN/data/openpose_b25_j15_9l_ntu_result/xview/aagcn_preprocess_sgn_model/230414100001/weight/SGN-110-10670.pt"  # noqa
+    # weights = "/data/07_AAGCN/data/openpose_b25_j15_9l_ntu_result/xview/aagcn_preprocess_sgn_model/230414100001/weight/SGN-110-10670.pt"  # noqa
+    # weights = "/data/07_AAGCN/data/openpose_b25_j15_5l_ntu_result/xview/aagcn_preprocess_sgn_model/230511130001/weight/SGN-120-8160.pt"  # noqa
+    # weights = "/data/07_AAGCN/data/openpose_b25_j15_4l_ntu_result/xview/aagcn_preprocess_sgn_model/230512123001/weight/SGN-66-3168.pt"  # noqa
+    # weights = "/data/07_AAGCN/data/openpose_b25_j15_4l_ntu_result/xsub/aagcn_preprocess_sgn_model/230512123001/weight/SGN-112-5824.pt"  # noqa
+    weights = "/data/07_AAGCN/data/openpose_b25_j11_4l_ntu_result/xview/aagcn_preprocess_sgn_model/230517123001/weight/SGN-94-4512.pt"  # noqa
+    # weights = "/data/07_AAGCN/data/openpose_b25_j11_4l_ntu_result/xsub/aagcn_preprocess_sgn_model/230517123001/weight/SGN-82-4264.pt"  # noqa
+    # weights = "/data/07_AAGCN/data/openpose_b25_j15_5l_ntu_result/xview/aagcn_joint/230511130001/weight/Model-40-2720.pt"  # noqa
     # weights = "/data/07_AAGCN/data/openpose_b25_j15_ntu_result/xview/aagcn_joint/230414100001/weight/Model-50-29400.pt"  # noqa
     # weights = "/data/07_AAGCN/data/openpose_b25_j15_9l_ntu_result/xview/aagcn_joint/230414100001/weight/Model-50-4850.pt"  # noqa
     # config = "/data/07_AAGCN/data/openpose_b25_j15_ntu_result/xview/aagcn_preprocess_sgn_model/230414100001/config.yaml"  # noqa
-    config = "/data/07_AAGCN/data/openpose_b25_j15_9l_ntu_result/xview/aagcn_preprocess_sgn_model/230414100001/config.yaml"  # noqa
+    # config = "/data/07_AAGCN/data/openpose_b25_j15_9l_ntu_result/xview/aagcn_preprocess_sgn_model/230414100001/config.yaml"  # noqa
+    # config = "/data/07_AAGCN/data/openpose_b25_j15_5l_ntu_result/xview/aagcn_preprocess_sgn_model/230511130001/config.yaml"  # noqa
+    # config = "/data/07_AAGCN/data/openpose_b25_j15_4l_ntu_result/xview/aagcn_preprocess_sgn_model/230512123001/config.yaml"  # noqa
+    # config = "/data/07_AAGCN/data/openpose_b25_j15_4l_ntu_result/xsub/aagcn_preprocess_sgn_model/230512123001/config.yaml"  # noqa
+    config = "/data/07_AAGCN/data/openpose_b25_j11_4l_ntu_result/xview/aagcn_preprocess_sgn_model/230517123001/config.yaml"  # noqa
+    # config = "/data/07_AAGCN/data/openpose_b25_j11_4l_ntu_result/xsub/aagcn_preprocess_sgn_model/230517123001/config.yaml"  # noqa
+    # config = "/data/07_AAGCN/data/openpose_b25_j15_5l_ntu_result/xview/aagcn_joint/230511130001/config.yaml"  # noqa
     # config = "/data/07_AAGCN/data/openpose_b25_j15_ntu_result/xview/aagcn_joint/230414100001/config.yaml"  # noqa
     # config = "/data/07_AAGCN/data/openpose_b25_j15_9l_ntu_result/xview/aagcn_joint/230414100001/config.yaml"  # noqa
     parser = get_ar_parser()
     parser.set_defaults(**{'config': config})
     args = load_parser_args_from_config(parser)
     args.weights = weights
-    args.max_frame = 50
+    args.max_frame = 60
     args.max_num_skeleton_true = 2
     args.max_num_skeleton = 4
-    args.num_joint = 15
+    args.num_joint = 11
     args.gpu = True
     args.timing = False
     args.interval = 0
@@ -122,7 +566,7 @@ def get_ar_args():
     args.label_mapping_file = label_mapping_file
     # args.out_folder = "/data/07_AAGCN/data_tmp/delme"
     print("========================================")
-    print(">>>>> ar_args <<<<<")
+    print(">>>>> args_ar <<<<<")
     print("========================================")
     for k, v in vars(args).items():
         print(f"{k} : {v}")
@@ -130,136 +574,372 @@ def get_ar_args():
     return args
 
 
-class SkeletonStorage():
+def transform_3dpose(joints3d, depth_scale):
+    # # 230511
+    # matrix_z = np.array(
+    #     [[0.99950274, -0.03090854, -0.00623903],
+    #      [0.03090854,  0.92122211,  0.38780727],
+    #      [-0.00623903, -0.38780727,  0.92171937]]
+    # )
+    # joints3d += np.array([0, -1500*depth_scale, 500*depth_scale])
+    # # 230516
+    # matrix_z = np.array(
+    #     [[0.99953916, -0.02967045, -0.00641373],
+    #      [0.02967045,  0.9102765,   0.41293627],
+    #      [-0.00641373, -0.41293627, 0.91073734]]
+    # )
+    # joints3d += np.array([-700, -2200, 0])*depth_scale
+    # # 230517
+    # matrix_z = np.array(
+    #     [[0.99657794, -0.08064464, -0.0181342],
+    #      [0.08064464,  0.90048104,  0.42735271],
+    #      [-0.0181342,  -0.42735271,  0.9039031]]
+    # )
+    # joints3d += np.array([-0, -1700, 1000])*depth_scale
+    # joints3d = (matrix_z@joints3d.transpose()).transpose()
+    # joints3d[:, 0] *= -1.
+    # joints3d[:, 1] *= -0.7
+    # # 230522
+    # matrix_z = np.array(
+    #     [[0.09203368, -0.94567705, -0.31180878],
+    #      [0.94567705, -0.01504597,  0.32475919],
+    #      [-0.31180878, -0.32475919,  0.89292035]]
+    # )
+    # joints3d += np.array([-1600, -1000, 1500])*depth_scale
+    # joints3d = (matrix_z@joints3d.transpose()).transpose()
+    # joints3d[:, 0] *= -1.
+    # joints3d[:, 1] *= -1.  # to be ntu compat
+    # # 230523
+    # matrix_z = np.array(
+    #     [[0.08971949, -0.9443577,  -0.31644739],
+    #      [0.9443577,  -0.0202894,   0.32829389],
+    #      [-0.31644739, -0.32829389,  0.88999111]]
+    # )
+    # 230531
+    matrix_z = np.array(
+        [[0.09067461, -0.94602187, -0.31116032],
+         [0.94602187, -0.01580074,  0.32371742],
+         [-0.31116032, -0.32371742,  0.89352464]]
+    )
+    joints3d += np.array([-2200, -700, 0])*depth_scale
+    # joints3d += np.array([-1300, -800, 500])*depth_scale
+    joints3d = (matrix_z@joints3d.transpose()).transpose()
+    # joints3d[:, 0] *= -1.
+    joints3d[:, 1] *= -1.  # to be ntu compat
+    return joints3d
+
+
+class App():
     def __init__(self) -> None:
-        self.ids = []
-        self.skeletons = []
-        self.counter = []
-        self.valid = []
+        self.CF = None
+        self.DS = None
+        self.TP = None
+        self.AH = None
+        self.ET = None
+        self.AR = None
+        self.LABEL_MAPPING = None
+        self.RS = None
+        self.RS_INFO = {}
 
-    def add(self, track_id, keypoints):
-        if track_id in self.ids:
-            sid = self.ids.index(track_id)
-            self.skeletons[sid].append(keypoints)
-            self.valid.append(True)
+    def setup(self,
+              config: Config,
+              get_args_rs_func: Callable = get_args_rs,
+              get_args_op_func: Callable = get_args_op,
+              get_args_ar_func: Callable = get_args_ar
+              ) -> Tuple[Storage, TextParser, ActionHistory,
+                         ExtractSkeletonAndTrack, ActionRecognition, dict]:
+        # 1. args + setup ------------------------------------------------------
+        # Overall configurations
+        self.CF = config
+        self.CF.args_rs = get_args_rs_func()
+        self.CF.args_op = get_args_op_func()
+        self.CF.args_ar = get_args_ar_func()
+        # For skeleton storage
+        self.DS = Storage(self.CF)
+        # For parsing sentences
+        self.TP = TextParser(self.CF, fps=self.CF.args_rs.rs_fps)
+        # Tracks previous action predictionsd
+        self.AH = ActionHistory(self.CF)
+        # 2. Setup extract and track classes -----------------------------------
+        PoseExtractor = OpenPosePoseExtractor(self.CF.args_op)
+        PoseTracker = Tracker(
+            self.CF.args_op,
+            self.CF.args_op.op_track_buffer//(self.CF.delay_switch+1)
+        )
+        self.ET = ExtractSkeletonAndTrack(self.CF.args_op,
+                                          PoseExtractor,
+                                          PoseTracker,
+                                          self.CF.enable_timer)
+        self.ET.start()
+        # 3. setup aagcn -------------------------------------------------------
+        with open(self.CF.args_ar.label_mapping_file, 'r') as f:
+            self.MAPPING = {int(i): j for i, j in json.load(f).items()}
+        # self.AR = ActionRecognition(self.CF.args_ar)
+
+    def setup_realsense(self):
+        rsw = RealsenseWrapper(self.CF.args_rs, self.CF.args_rs.rs_dev)
+        rsw.initialize_depth_sensor_ae()
+        if len(rsw.enabled_devices) == 0:
+            raise ValueError("no devices connected")
+        rsw = RealsenseWrapper(self.CF.args_rs, self.CF.args_rs.rs_dev)
+        rsw.initialize()
+        rsw.flush_frames(self.CF.args_rs.rs_fps * 5)
+        time.sleep(3)
+        device_sn = list(rsw.enabled_devices.keys())[0]
+        ds = rsw.calib_data.get_data(device_sn)['depth']['depth_scale']
+        im = rsw.calib_data.get_data(device_sn)['depth']['intrinsic_mat']
+        self.RS = rsw
+        self.RS_INFO = {'device_sn': device_sn,
+                        'depth_scale': ds,
+                        'intr_mat': im, }
+
+    def infer_pose_and_track(self, color_image, depth_image):
+        skel_added = False
+        # track without pose extraction ----------------------------------------
+        if self.CF.delay_counter > 0:
+            self.CF.delay_counter -= 1
+            self.ET.TK.no_measurement_predict_and_update()
+            status, op_image = self.ET.PE.display(
+                win_name=f"est_{self.RS_INFO['device_sn']}",
+                speed=self.CF.display_speed,
+                scale=self.CF.args_op.op_display,
+                image=None,
+                bounding_box=True,
+                tracks=self.ET.TK.tracks
+            )
         else:
-            self.ids.append(track_id)
-            self.skeletons.append([keypoints])
-            self.counter.append(0)
-            self.valid.append(True)
+            self.CF.delay_counter = self.CF.delay_switch
+            # infer pose and track ---------------------------------------------
+            self.ET.queue_input((color_image, None, None, None, False))
+            est_out = self.ET.queue_output()
+            (self.CF.filered_skel, self.CF.prep_time,
+                self.CF.infer_time, self.CF.track_time, _) = est_out
+            if not self.ET.PE.pyop.pose_empty:
+                self.ET.PE.pyop.convert_to_3d(
+                    depth_image=depth_image,
+                    intr_mat=self.RS_INFO['intr_mat'],
+                    depth_scale=self.RS_INFO['depth_scale']
+                )
+                for track in self.ET.TK.tracks:
+                    joints3d = self.ET.PE.pyop.pose_keypoints_3d[track.det_id]
+                    joints3d = transform_3dpose(joints3d,
+                                                self.RS_INFO['depth_scale'])
+                    if track.is_activated:
+                        self.DS.add(
+                            track.track_id,
+                            self.ET.PE.pyop.pose_keypoints[track.det_id][:, :2],
+                            joints3d,
+                            self.ET.PE.pyop.pose_keypoints[track.det_id][:, 2]
+                        )
+                        skel_added = True
+            self.DS.check_valid_and_delete()
+            status, op_image = self.ET.PE.display(
+                win_name=f"est_{self.RS_INFO['device_sn']}",
+                speed=self.CF.display_speed,
+                scale=self.CF.args_op.op_display,
+                image=None,
+                bounding_box=False,
+                tracks=self.ET.TK.tracks
+            )
+        return status, op_image, skel_added
 
-    def get_last_skel(self):
-        skels = []
-        for skeleton in self.skeletons:
-            skels.append(skeleton[-1])
-        return np.expand_dims(np.stack(skels, 0), 1)  # M, 1, V, C
+    def infer_action(self, c=0):
+        # # data : M, 1, V, C
+        # _, kpt, data, score = datastorage.get_last_skel()
+        (raw_kypts, avg_kypts,
+         raw_skels, avg_skels,
+         raw_score, avg_score,
+         motion, max_dys, max_dyl) = self.DS.get_last_skel(
+            self.CF.args_op.op_max_true_body,
+            self.CF.valid_joints
+        )
+        max_x = [round(i[0, :, 0].max(), 2) for i in avg_skels]
+        max_y = [round(i[0, :, 1].max(), 2) for i in avg_skels]
+        max_z = [round(i[0, :, 2].max(), 2) for i in avg_skels]
+        x_dif = [round(i[0, :, 0].max() - i[0, :, 0].min(), 2)
+                 for i in avg_skels]
+        y_dif = [round(i[0, :, 1].max() - i[0, :, 1].min(), 2)
+                 for i in avg_skels]
+        ratio = [round(j / i, 2) for i, j in zip(x_dif, y_dif)]
+        # adding data, predict, filter
+        # # DL MODEL ------
+        # self.AR.append_data(avg_skels, avg_score)
+        # logits, prediction = self.AR.predict()
+        # logits, prediction = self.DS.filter_action(
+        #     logits, prediction)
+        # RULE BAESD -----
+        logits = [0]
+        prediction = 0
 
-    def delete(self, idx):
-        self.ids.pop(idx)
-        self.skeletons.pop(idx)
-        self.counter.pop(idx)
-        self.valid.pop(idx)
+        # 1. Standing, d_ys > RULE_THRES_STAND (+ve)
+        if max_dys[0] > self.CF.RULE_THRES_STAND:
+            prediction = 2
+        # 2. Standing, d_yl > RULE_THRES_STAND_LONG (+ve)
+        elif max_dyl[0] > self.CF.RULE_THRES_STAND_LONG:
+            prediction = 2
+        # 3. Falling, ys < RULE_THRES_FALL_HEIGHT (+ve)
+        elif max_y[0] < self.CF.RULE_THRES_FALL_HEIGHT:
+            prediction = 3
+        # 4. Falling, d_ys < RULE_THRES_FALL (-ve)
+        elif max_dys[0] < self.CF.RULE_THRES_FALL:
+            prediction = 3
+        # 5. Sit, d_ys < RULE_THRES_SIT (-ve)
+        elif max_dys[0] < self.CF.RULE_THRES_SIT:
+            # 5.1. (Slowly) Falling, ys < RULE_THRES_FALL_HEIGHT (+ve)
+            if max_y[0] < self.CF.RULE_THRES_FALL_HEIGHT:
+                prediction = 3
+            # 5.2. Sitting
+            else:
+                prediction = 1
+        # 6. Sit, d_yl < RULE_THRES_SIT_LONG (-ve)
+        elif max_dyl[0] < self.CF.RULE_THRES_SIT_LONG:
+            # 6.1. (Slowly) Falling, ys < RULE_THRES_FALL_HEIGHT (+ve)
+            if max_y[0] < self.CF.RULE_THRES_FALL_HEIGHT:
+                prediction = 3
+            # 6.2. Sitting
+            else:
+                prediction = 1
+        logits = np.zeros(4)
+        logits[prediction] = 1.0
+        prediction = self.DS.filter_action(logits, prediction)
+        print(
+            f'{c:04}', "|",
+            # "#Pose > 30% :", round((score > 0.3).sum(), 1), "|",
+            "ID :", self.DS.ids, "|",
+            "#Skels :", [len(s) for s in self.DS.avg_skels], "|",
+            [f'{round(a, 2):.2f}' for a in self.DS.action[-1]]
+        )
+        print(
+            # "Logits :", [round(i*100, 1) for i in logits], "|",
+            # "Action :", self.LABEL_MAPPING[prediction+1][:10], "|",
+            # "MaxX :", max_x, "|",
+            "MaxY :", [f'{i:.2f}' for i in max_y], "|",
+            "MaxYsD :", [f'{round(i[0], 2):.2f}' for i in max_dys], "|",
+            "MaxYlD :", [f'{round(i[0], 2):.2f}' for i in max_dyl], "|",
+            "MaxZ :", [f'{i:.2f}' for i in max_z], "|",
+            "H :", [f'{i:.2f}' for i in y_dif], "|",
+            "[H/W] :", [f'{i:.2f}' for i in ratio], "|",
+            "M :", [f'{round(m[0], 3):.3f}' for m in motion], "|",
+            # ["MOVING" if m[0] > 0.015 else "STILL"
+            # for m in motion]
+        )
 
-    def check_valid_and_delete(self):
-        num_data = len(self.ids)
-        del_idx = []
-        for i in range(num_data):
-            if not self.valid[i]:
-                self.counter[i] += 1
-            if self.counter[i] > 30:
-                del_idx.append(i)
-            self.valid[i] = False
-        for i in del_idx:
-            self.delete(i)
+        return raw_kypts, raw_score, avg_skels, motion, prediction
 
+    @staticmethod
+    def visualize_3dplot(data, alpha, num_joint):
+        # data: C, 1, V, M
+        if POSE is None:
+            if num_joint == 11:
+                graph = 'graph.openpose_b25_j11.Graph'
+            else:
+                graph = 'graph.openpose_b25_j15.Graph'
+            POSE, EDGE, FIG = \
+                visualize_3dskeleton_in_matplotlib(
+                    data=np.expand_dims(data, axis=0),
+                    graph=graph,
+                    is_3d=True,
+                    speed=1e-8,
+                    fig=FIG,
+                    mode='openpose',
+                    alpha=alpha
+                )
+        else:
+            visualize_3dskeleton_in_matplotlib_step(
+                data=np.expand_dims(data, axis=0),
+                t=0,
+                pose=POSE,
+                edge=EDGE,
+                is_3d=True,
+                speed=1e-8,
+                fig=FIG,
+                alpha=alpha
+            )
+            # jot = ["Head", "MSho",
+            #        "RSho", "RElb", "RHan",
+            #        "LSho", "LElb", "LHan",
+            #        "MHip", "RHip", "LHip",
+            #        "RKne", "RFee",
+            #        "LKne", "LFee",]
+            # out = [f"{j} {i:.1f}" for j, i in zip(jot, EST.PE.pyop.pose_keypoints[0, valid_joints, -1].tolist())]  # noqa
+            # print(out)
 
-def visualize_rs(color_image: np.ndarray, depth_colormap: np.ndarray,
-                 depth_scale: float, winname: str):
-    # overlay depth colormap with color image
-    images_overlapped = cv2.addWeighted(src1=color_image, alpha=0.3,
-                                        src2=depth_colormap, beta=0.5,
-                                        gamma=0)
-    # Set pixels further than clipping_distance to grey
-    clipping_distance = 3.5 / depth_scale
-    grey_color = 153
-    # depth image is 1 channel, color is 3 channels
-    depth_image_3d = np.dstack(
-        (depth_image, depth_image, depth_image))
-    bg_removed = np.where(
-        (depth_image_3d > clipping_distance) | (depth_image_3d <= 0),
-        grey_color, images_overlapped)
-    cv2.namedWindow(f'{winname}', cv2.WINDOW_AUTOSIZE)
-    cv2.imshow(f'{winname}', bg_removed)
-    key = cv2.waitKey(1)
-    # Press esc or 'q' to close the image window
-    if key & 0xFF == ord('q') or key == 27:
-        cv2.destroyAllWindows()
-        cv2.waitKey(5)
-        printout("`q` button pressed", 'i')
-        return True
-    else:
-        return False
+    @staticmethod
+    def visualize_rs(color_image: np.ndarray,
+                     depth_colormap: np.ndarray,
+                     depth_scale: float,
+                     winname: str):
+        # overlay depth colormap with color image
+        images_overlapped = cv2.addWeighted(src1=color_image, alpha=0.3,
+                                            src2=depth_colormap, beta=0.5,
+                                            gamma=0)
+        # Set pixels further than clipping_distance to grey
+        clipping_distance = 3.5 / depth_scale
+        grey_color = 153
+        # depth image is 1 channel, color is 3 channels
+        depth_image_3d = np.dstack(
+            (depth_image, depth_image, depth_image))
+        bg_removed = np.where(
+            (depth_image_3d > clipping_distance) | (depth_image_3d <= 0),
+            grey_color, images_overlapped)
+        cv2.namedWindow(f'{winname}', cv2.WINDOW_AUTOSIZE)
+        cv2.imshow(f'{winname}', bg_removed)
+        key = cv2.waitKey(1)
+        # Press esc or 'q' to close the image window
+        if key & 0xFF == ord('q') or key == 27:
+            cv2.destroyAllWindows()
+            cv2.waitKey(5)
+            printout("`q` button pressed", 'i')
+            return True
+        else:
+            return False
+
+    @staticmethod
+    def visualize_output(image: np.ndarray,
+                         kpt: Optional[np.ndarray] = None,
+                         text: Optional[str] = None,
+                         color: Optional[tuple] = None,
+                         vertical: bool = False):
+        if vertical:
+            image = np.rot90(image, -1).copy()
+        crop = image[:50, :]
+        black_rect = np.zeros(crop.shape, dtype=np.uint8)
+        overlay = cv2.addWeighted(crop, 0.3, black_rect, 0.7, 1.0)
+        image[:50, :] = overlay
+        if color is None:
+            color = (255, 255, 255)
+        if text is not None:
+            image = cv2.putText(
+                image,
+                text,
+                (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8,
+                color,
+                1,
+                cv2.LINE_AA
+            )
+        if kpt is not None:
+            pos = kpt.astype(int)
+            if vertical:
+                pos = np.flip(pos)
+                pos[0] = CAMERA_H - pos[0]
+            cv2.circle(image, pos, 20, (255, 255, 255), -1)
+        return image
 
 
 if __name__ == "__main__":
 
-    # Delay = predict and no update in tracker
-    delay_switch = 0
-    delay_counter = 0
+    config = Config()
+    app = App()
+    app.setup(config)
 
-    # For cv.imshow
-    display_speed = 1
-
-    # Runtime logging
-    enable_timer = True
-    fps = {'PE': [], 'TK': []}
-    infer_time = -1
-    track_time = -1
-    filered_skel = -1
-    prep_time = -1
-    recog_time = -1
-
-    # For skeleton storage
-    skelstorage = SkeletonStorage()
-
-    # 1. args ------------------------------------------------------------------
-    rs_args = get_rs_args()
-    op_args = get_op_args()
-    ar_args = get_ar_args()
-
-    # 2. setup realsense -------------------------------------------------------
-    rsw = RealsenseWrapper(rs_args, rs_args.rs_dev)
-    rsw.initialize_depth_sensor_ae()
-
-    if len(rsw.enabled_devices) == 0:
-        raise ValueError("no devices connected")
-
-    rsw = RealsenseWrapper(rs_args, rs_args.rs_dev)
-    rsw.initialize()
-
-    rsw.flush_frames(rs_args.rs_fps * 5)
-    time.sleep(3)
-
-    device_sn = list(rsw.enabled_devices.keys())[0]
-    depth_scale = rsw.calib_data.get_data(device_sn)['depth']['depth_scale']
-    intr_mat = rsw.calib_data.get_data(device_sn)['depth']['intrinsic_mat']
-
-    # 3. Setup extract and track classes ---------------------------------------
-    PoseExtractor = OpenPosePoseExtractor(op_args)
-    PoseTracker = Tracker(op_args, 30//(delay_switch+1))
-    EST = ExtractSkeletonAndTrack(
-        op_args, PoseExtractor, PoseTracker, enable_timer)
-    EST.start()
-
-    # 4. setup aagcn -----------------------------------------------------------
-    with open(ar_args.label_mapping_file, 'r') as f:
-        MAPPING = {int(i): j for i, j in json.load(f).items()}
-
-    AR = ActionRecognition(ar_args)
-
-    ar_start_time = time.time()
+    # Setup realsense ----------------------------------------------------------
+    app.setup_realsense()
 
     # MAIN LOOP ----------------------------------------------------------------
+    ar_start_time = time.time()
+
     try:
         c = 0
         max_c = int(1e8)
@@ -269,132 +949,132 @@ if __name__ == "__main__":
             if c < 15:
                 fps = {'PE': [], 'TK': []}
 
-            # 5. grab image from realsense -------------------------------------
-            # rsw.step(
-            #     display=rs_args.rs_display_frame,
-            #     display_and_save_with_key=rs_args.rs_save_with_key
-            # )
-            with Timer("rsw", enable_timer, False) as t:
-                rsw.step(
+            # 1. grab image from realsense -------------------------------------
+            with Timer("rsw", app.CF.enable_timer, False) as t:
+                app.RS.step(
                     display=0,
                     display_and_save_with_key=False,
                     use_colorizer=False
                 )
-            rs_time = t.duration
-            color_image = rsw.frames[device_sn]['color_framedata']  # h,w,c
-            depth_image = rsw.frames[device_sn]['depth_framedata']  # h,w
+            app.CF.rs_time = t.duration
+            frame = app.RS.frames[app.RS_INFO['device_sn']]
+            color_image = frame['color_framedata']  # h,w,c
+            depth_image = frame['depth_framedata']  # h,w
+            if app.CF.args_rs.rs_postprocess:
+                depth_image = cv2.resize(depth_image, (color_image.shape[1],
+                                                       color_image.shape[0]))
+            # Remove the border pixels as measurements there are not good
+            color_image[:20, :, :] = 0
+            color_image[-20:, :, :] = 0
+            color_image[depth_image > 2800] = 0
+            color_image[depth_image < 300] = 0
             # depth_colormap = rsw.frames[device_sn]['depth_color_framedata']
-            # quit_key = visualize_rs(color_image=color_image,
-            #                         depth_colormap=depth_colormap,
-            #                         depth_scale=depth_scale,
-            #                         winname=f'rs_{device_sn}')
+            # quit_key = app.visualize_rs(color_image=color_image,
+            #                             depth_colormap=depth_colormap,
+            #                             depth_scale=depth_scale,
+            #                             winname=f'rs_{device_sn}')
             # if quit_key:
             #     break
 
-            # 6. track without pose extraction ---------------------------------
-            if delay_counter > 0:
-                delay_counter -= 1
-                EST.TK.no_measurement_predict_and_update()
-                EST.PE.display(win_name=f'est_{device_sn}',
-                               speed=display_speed,
-                               scale=op_args.op_display,
-                               image=None,
-                               bounding_box=True,
-                               tracks=EST.TK.tracks)
-            else:
-                delay_counter = delay_switch
-                # 7. infer pose and track --------------------------------------
-                EST.queue_input((color_image, None, None, None, False))
-                est_out = EST.queue_output()
-                (filered_skel, prep_time, infer_time, track_time, _) = est_out
-                if not EST.PE.pyop.pose_empty:
-                    EST.PE.pyop.convert_to_3d(
-                        depth_image=depth_image,
-                        intr_mat=intr_mat,
-                        depth_scale=depth_scale
-                    )
-                    for track in EST.TK.tracks:
-                        skelstorage.add(
-                            track.track_id,
-                            EST.PE.pyop.pose_keypoints_3d[track.det_id]
-                        )
-                skelstorage.check_valid_and_delete()
-                status = EST.PE.display(win_name=f'est_{device_sn}',
-                                        speed=display_speed,
-                                        scale=op_args.op_display,
-                                        image=None,
-                                        bounding_box=False,
-                                        tracks=EST.TK.tracks)
-                if not status[0]:
+            # 2. track without pose extraction ---------------------------------
+            # 3. infer pose and track ------------------------------------------
+            status, op_image, skel_added = app.infer_pose_and_track(
+                color_image, depth_image)
+            if not status:
+                break
+
+            # 4. action recognition --------------------------------------------
+            if time.time() - ar_start_time < int(app.CF.args_ar.interval):
+                continue
+
+            with Timer("AR", app.CF.enable_timer, False) as t:
+                if len(app.DS.skeletons) > 0:
+                    (raw_kypts, raw_score, avg_skels,
+                     motion, prediction) = app.infer_action(c)
+
+            app.CF.recog_time = t.duration
+            if app.CF.recog_time is None:
+                app.CF.recog_time = -1
+
+            # Visualize results -----------
+            if not MATPLOT:
+                assert op_image is not None
+                text_id, text, color = app.TP.text_parser(
+                    app.DS.ids[0], prediction, motion[0, 0])
+                op_image = app.visualize_output(
+                    op_image,
+                    raw_kypts[0, 0, 0],
+                    text,
+                    color,
+                    app.CF.args_rs.rs_vertical
+                )
+                cv2.imshow(f"est_{app.RS_INFO['device_sn']}", op_image)
+                key = cv2.waitKey(1)
+                # Press esc or 'q' to close the image window
+                if key & 0xFF == ord('q') or key == 27:
+                    cv2.destroyAllWindows()
+                    cv2.waitKey(5)
                     break
 
-            # 8. action recognition --------------------------------------------
-            if time.time() - ar_start_time > int(ar_args.interval):
-                with Timer("AR", enable_timer, False) as t:
-                    if len(skelstorage.skeletons) > 0:
-                        # data  # M, 1, V, C
-                        data = skelstorage.get_last_skel()
-                        AR.append_data(data[:op_args.op_max_true_body,
-                                            :,
-                                            :ar_args.num_joint,
-                                            :])
-                        # logits = [#labels], prediction = from 0 - #labels-1
-                        logits, prediction = AR.predict()
-                        if len(skelstorage.skeletons) < 2:
-                            logits = logits[:-3]
-                            prediction = logits.index(max(logits))
-                        print(skelstorage.ids,
-                              [round(i*100, 1) for i in logits],
-                              MAPPING[prediction+1])
-                    recog_time = t.duration
-                if recog_time is None:
-                    recog_time = -1
+                if OUTPUT_VIDEO is not None:
+                    OUTPUT_VIDEO.write(op_image)
+
+            if MATPLOT:
+                # M, 1, V, C -> C, 1, V, M
+                avg_skels = avg_skels.transpose(3, 1, 2, 0)[:, :, :, 0:1]  # noqa
+                avg_skels[1] *= -1.0
+                alpha = raw_score[0, 0].tolist()
+                num_joint = app.CF.args_ar.num_joint
+                app.visualize_3dplot(avg_skels, alpha, num_joint)
 
             # 8. printout ------------------------------------------------------
-            if c % rs_args.rs_fps == 0:
+            if c % app.CF.args_rs.rs_fps == 0:
                 # printout(
                 #     f"Step {c:12d} :: "
-                #     f"{[i.get('color_timestamp', None) for i in rsw.frames.values()]} :: "  # noqa
-                #     f"{[i.get('depth_timestamp', None) for i in rsw.frames.values()]}",  # noqa
+                #     f"{[i.get('color_timestamp', None) for i in app.RS.frames.values()]} :: "  # noqa
+                #     f"{[i.get('depth_timestamp', None) for i in app.RS.frames.values()]}",  # noqa
                 #     'i'
                 # )
-                color_timestamp = list(rsw.frames.values())[0].get('color_timestamp')  # noqa
-                fps['PE'].append(1/infer_time)
-                fps['TK'].append(1/track_time)
+                color_timestamp = list(app.RS.frames.values())[0].get('color_timestamp')  # noqa
+                fps['PE'].append(1/app.CF.infer_time)
+                fps['TK'].append(1/app.CF.track_time)
                 printout(
                     f"Image : {color_timestamp} | "
-                    f"#Skel filtered : {filered_skel} | "
-                    f"#Tracks : {len(EST.TK.tracks)} | "
-                    f"RS time : {rs_time:.3f} | "
-                    f"Prep time : {prep_time:.3f} | "
-                    f"Pose time : {infer_time:.3f} | "
-                    f"Track time : {track_time:.3f} | "
-                    f"Recog time : {recog_time:.3f} | "
+                    f"#Skel filtered : {app.CF.filered_skel} | "
+                    f"#Tracks : {len(app.ET.TK.tracks)} | "
+                    f"RS time : {app.CF.rs_time:.3f} | "
+                    f"Prep time : {app.CF.prep_time:.3f} | "
+                    f"Pose time : {app.CF.infer_time:.3f} | "
+                    f"Track time : {app.CF.track_time:.3f} | "
+                    f"Recog time : {app.CF.recog_time:.3f} | "
                     f"FPS PE : {sum(fps['PE'])/len(fps['PE']):.3f} | "
                     f"FPS TK : {sum(fps['TK'])/len(fps['TK']):.3f}",
                     'i'
                 )
 
-            if not len(rsw.frames) > 0:
+            if not len(app.RS.frames) > 0:
                 printout(f"Empty...", 'w')
                 continue
 
+            if c % (app.CF.args_rs.rs_fps*60) == 0 and c > 0:
+                app.DS.reset()
+
             c += 1
-            if c > rs_args.rs_fps * rs_args.rs_steps or c > max_c:
-                break
 
     except Exception as e:
         exc_type, exc_obj, exc_tb = sys.exc_info()
         fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        print(exc_type, fname, exc_tb.tb_lineno)
-        printout(f"{e}", 'e')
+        printout(f"{exc_type}, {fname}, {exc_tb.tb_lineno}", 'e')
+        printout(f"Exception msg : {e}", 'e')
+        traceback.print_tb(exc_tb)
         printout(f"Stopping RealSense devices...", 'i')
-        rsw.stop()
+        app.RS.stop()
 
     finally:
         printout(f"Final RealSense devices...", 'i')
-        rsw.stop()
+        app.RS.stop()
 
-    EST.break_process_loops()
-
+    if OUTPUT_VIDEO is not None:
+        OUTPUT_VIDEO.release()
+    app.ET.break_process_loops()
     printout(f"Finished...", 'i')

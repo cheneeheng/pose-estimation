@@ -8,6 +8,8 @@ from typing import Optional, Union, List, Tuple, Any
 from .utils import get_color
 
 
+TORSO_IDS = [1, 2, 5, 8, 9, 12]
+
 # IMG = cv2.imread(
 #     "/usr/local/src/openpose/examples/media/COCO_val2014_000000000192.jpg")
 
@@ -89,14 +91,23 @@ class PyOpenPoseNativeBase:
             return None
         if self._pose_bounding_box is None:
             bb = []
+
             for pose_keypoints in self.pose_keypoints:
-                u = pose_keypoints[:, 0]
-                v = pose_keypoints[:, 1]
-                s = pose_keypoints[:, 2]
-                u_min = u[s != 0].min()
-                u_max = u[s != 0].max()
-                v_min = v[s != 0].min()
-                v_max = v[s != 0].max()
+                u = pose_keypoints[TORSO_IDS, 0]
+                v = pose_keypoints[TORSO_IDS, 1]
+                s = pose_keypoints[TORSO_IDS, 2]
+                if (s != 0).any():
+                    u_min = u[s != 0].min()
+                    u_max = u[s != 0].max()
+                    v_min = v[s != 0].min()
+                    v_max = v[s != 0].max()
+                    if u_min == u_max:
+                        u_max += 1
+                    if v_min == v_max:
+                        v_max += 1
+                else:
+                    u_min = v_min = 0
+                    u_max = v_max = 1
                 bb.append(np.asarray([u_min, v_min, u_max, v_max]))
             self._pose_bounding_box = np.stack(bb)
         return self._pose_bounding_box
@@ -141,7 +152,7 @@ class PyOpenPoseNativeBase:
                 max(0, int(y-patch_offset)):min(H, int(y+patch_offset)),
                 max(0, int(x-patch_offset)):min(W, int(x+patch_offset))
             ]
-            depth_avg = np.mean(patch)
+            depth_avg = np.nanmean(patch)
             x3d = (x-cx) / fx * depth_avg
             y3d = (y-cy) / fy * depth_avg
             joints3d.append([x3d*depth_scale, y3d*depth_scale,
@@ -211,7 +222,7 @@ class PyOpenPoseNativeBase:
                                 (10, 50),
                                 cv2.FONT_HERSHEY_PLAIN,
                                 1,
-                                (255, 0, 0),
+                                (0, 255, 0),
                                 1,
                                 cv2.LINE_AA)
         return image
@@ -247,25 +258,26 @@ class PyOpenPoseNativeBase:
             tracks: Optional[list] = None) -> np.ndarray:
         if tracks is not None:
             for track in tracks:
-                try:
-                    # deepsort / ocsort
-                    bb = track.to_tlbr()
-                except AttributeError:
-                    # bytetrack
-                    bb = track.tlbr
-                l, t, r, b = bb
-                tl = (np.floor(l).astype(int), np.floor(t).astype(int))
-                br = (np.ceil(r).astype(int), np.ceil(b).astype(int))
-                image = cv2.rectangle(image, tl, br,
-                                      get_color(track.track_id), 1)
-                cv2.putText(image,
-                            f"ID : {track.track_id}",
-                            tl,
-                            cv2.FONT_HERSHEY_PLAIN,
-                            2,
-                            get_color(track.track_id),
-                            2,
-                            cv2.LINE_AA)
+                if track.is_activated:
+                    try:
+                        # deepsort / ocsort
+                        bb = track.to_tlbr()
+                    except AttributeError:
+                        # bytetrack
+                        bb = track.tlbr
+                    l, t, r, b = bb
+                    tl = (np.floor(l).astype(int), np.floor(t).astype(int))
+                    br = (np.ceil(r).astype(int), np.ceil(b).astype(int))
+                    image = cv2.rectangle(image, tl, br,
+                                          get_color(track.track_id), 2)
+                    cv2.putText(image,
+                                f"ID : {track.track_id}",
+                                tl,
+                                cv2.FONT_HERSHEY_PLAIN,
+                                2,
+                                get_color(track.track_id),
+                                2,
+                                cv2.LINE_AA)
         return image
 
     def display(self,
@@ -303,7 +315,7 @@ class PyOpenPoseNativeBase:
 
         image = self._draw_depth_on_skeleton_image(image, depth_image)
 
-        image = self._draw_text_on_skeleton_image(image, self.pose_scores)
+        # image = self._draw_text_on_skeleton_image(image, self.pose_scores)
 
         if bounding_box:
             image = self._draw_bounding_box_on_skeleton_image(
@@ -325,15 +337,16 @@ class PyOpenPoseNativeBase:
             cv2.setWindowProperty(win_name,
                                   cv2.WND_PROP_FULLSCREEN,
                                   cv2.WINDOW_FULLSCREEN)
-        cv2.imshow(win_name, image)
-        key = cv2.waitKey(speed)
-        # Press esc or 'q' to close the image window
-        if key & 0xFF == ord('q') or key == 27:
-            cv2.destroyAllWindows()
-            cv2.waitKey(5)
-            return False, image
-        else:
-            return True, image
+        # cv2.imshow(win_name, image)
+        # key = cv2.waitKey(speed)
+        # # Press esc or 'q' to close the image window
+        # if key & 0xFF == ord('q') or key == 27:
+        #     cv2.destroyAllWindows()
+        #     cv2.waitKey(5)
+        #     return False, image
+        # else:
+        #     return True, image
+        return True, image
 
     def save_skeleton_image(self,
                             save_path: str,
@@ -369,6 +382,8 @@ class PyOpenPoseNative(PyOpenPoseNativeBase):
             # params["heatmaps_scale"] = 2
             # params["upsampling_ratio"] = 1  # for saving raw heatmaps
 
+        params["disable_blending"] = True
+
         params["scale_number"] = 1
         params["body"] = 1
         params["posenet_only"] = False
@@ -398,6 +413,7 @@ class PyOpenPoseNative(PyOpenPoseNativeBase):
 
         self.opWrapper = op.WrapperPython()
         self.opWrapper.configure(self.params)
+        self.opWrapper.start()
 
         # results
         self.filtered_skel = "0"
@@ -567,9 +583,9 @@ class OpenPosePoseExtractor:
                     _image = cv2.resize(image, (int(image.shape[1]*scale),
                                                 int(image.shape[0]*scale)))
                     img = np.concatenate([_image, img], axis=0)
-                cv2.imshow(win_name, img)
-                cv2.waitKey(speed)
-                return True, image
+                # cv2.imshow(win_name, img)
+                # cv2.waitKey(speed)
+                return True, img
 
             else:
                 return self.pyop.display(win_name,

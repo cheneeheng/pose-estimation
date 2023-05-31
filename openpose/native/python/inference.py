@@ -136,6 +136,7 @@ class ExtractSkeletonAndTrack:
                     img = PYOP._draw_tracking_bounding_box_image(img, self.TK.tracks)  # noqa
                 duration = t.duration+1e-8
             else:
+                self.TK.no_measurement_predict_and_update()
                 if self.args.op_save_track_image:
                     img = PYOP._draw_text_on_skeleton_image(img, scores)
                     img = PYOP._draw_bounding_box_on_skeleton_image(img, boxes)

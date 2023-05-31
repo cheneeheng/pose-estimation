@@ -158,6 +158,7 @@ def get_parser() -> argparse.ArgumentParser:
     p.add_argument('--bytetracker-trackbuffer', type=int, default=30)
     p.add_argument('--bytetracker-matchthresh', type=float, default=0.8)
     p.add_argument('--bytetracker-mot20', type=str2bool, default=False)
+    p.add_argument('--bytetracker-fps', type=float, default=30)
     p.add_argument('--ocsort-detthresh', type=float, default=0.5)
     p.add_argument('--ocsort-maxage', type=int, default=30)
     p.add_argument('--ocsort-minhits', type=int, default=3)

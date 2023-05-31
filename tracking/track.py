@@ -5,6 +5,8 @@ from typing import Optional
 
 from .utils_track import create_detections
 
+from openpose.native.python.skeleton import TORSO_IDS
+
 from submodules.ByteTrack.yolox.tracker.byte_tracker import BYTETracker
 from submodules.ByteTrack.yolox.tracker.byte_tracker import STrack
 from submodules.ByteTrack.yolox.tracker.byte_tracker import joint_stracks
@@ -116,7 +118,7 @@ class Tracker():
             self.name = 'byte_tracker'
             args = ByteTrackerArgs(input_args)
             args.track_buffer = max_age
-            self.tracker = BYTETracker(args)
+            self.tracker = BYTETracker(args, input_args.bytetracker_fps)
         elif input_args.op_track_ocsort:
             self.name = 'oc_sort'
             args = OCSortArgs(input_args)
@@ -160,8 +162,14 @@ class Tracker():
                 boxes, scores, keypoints, heatmaps, image_size)
             self.tracker.update(self.detections)
         elif self.name == 'byte_tracker' or self.name == 'oc_sort':
-            self.detections = self._create_detections_np(boxes, scores)
-            self.tracker.update(self.detections)
+            joint_scores = keypoints[:, :, -1]  # M,V
+            scores = np.stack([i[TORSO_IDS].mean() for i in joint_scores])
+            # scores = np.stack([i[i > 0].mean() for i in joint_scores])
+            if scores.max() <= 0.1:
+                self.no_measurement_predict_and_update()
+            else:
+                self.detections = self._create_detections_np(boxes, scores)
+                self.tracker.update(self.detections)
 
     @staticmethod
     def _create_detections(boxes: np.ndarray,
