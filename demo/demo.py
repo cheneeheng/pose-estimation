@@ -30,6 +30,9 @@ FPS = 15
 CAMERA_W = 848
 CAMERA_H = 480
 
+HORITONTAL_BAR = np.ones((20, CAMERA_W, 3), dtype=np.uint8)*255
+VERTICAL_BAR = np.ones((CAMERA_W, 20, 3), dtype=np.uint8)*255
+
 FIG, POSE, EDGE = None, None, None
 MATPLOT = False
 
@@ -72,18 +75,20 @@ class Config():
         # max length of data to store
         self.MAX_STORAGE_LEN = 100
         # buffer before removed
-        self.BUFFER = 30
+        self.BUFFER = 0
         # moving average and threshold for average
         self.MOVING_AVG = 5
         self.SCORE_THRES = 0.25
         # Motion and action filtering
-        self.MOTION_DELAY = 3
+        self.MOTION_DELAY = 5
         self.MOTION_COUNT = 10
         self.ACTION_COUNT = 5
         self.MAY_YS_DELAY = 3
-        self.MAY_YS_COUNT = 10
+        self.MAY_YS_COUNT = 8
+        self.MAY_YL_DELAY = 6
+        self.MAY_YL_COUNT = 11
         # TextParser -----------------------------------------------------------
-        self.MOVE_THRES = 0.015
+        self.MOVE_THRES = 0.004
         # ActionHistory --------------------------------------------------------
         self.BOX_LEFT_OFFSET = 20
         self.BOX_TOP_OFFSET = 20
@@ -94,10 +99,10 @@ class Config():
         # Rule based action ----------------------------------------------------
         self.RULE_THRES_STAND = 0.05
         self.RULE_THRES_STAND_LONG = 0.10
-        self.RULE_THRES_SIT = -0.03
+        self.RULE_THRES_SIT = -0.05
         self.RULE_THRES_SIT_LONG = -0.10
         self.RULE_THRES_FALL = -0.10
-        self.RULE_THRES_FALL_HEIGHT = 1.25
+        self.RULE_THRES_FALL_HEIGHT = 1.20
 
     @ property
     def valid_joints(self):
@@ -187,6 +192,16 @@ class Storage():
     def _max_dyl_calc(self, skels, score):
         return self._diff_calc(
             skels, score, self.max_yl_count, self.max_yl_delay, 1)
+
+    def distance_between_2skel(self, x, s):
+        # y = norm(x[0][s>thres] - x[1][s>thres])
+        default = -1.0
+        if len(x) < 2:
+            return default
+        else:
+            x0, x1 = x[0], x[1]
+            s0, s1 = s[0] > self.score_thres, s[1] > self.score_thres
+            return np.linalg.norm(x1[s1] - x0[s0])
 
     def add(self, track_id, keypoints, skeletons, scores):
         if track_id in self.ids:
@@ -646,14 +661,13 @@ class App():
               get_args_rs_func: Callable = get_args_rs,
               get_args_op_func: Callable = get_args_op,
               get_args_ar_func: Callable = get_args_ar
-              ) -> Tuple[Storage, TextParser, ActionHistory,
-                         ExtractSkeletonAndTrack, ActionRecognition, dict]:
+              ) -> None:
         # 1. args + setup ------------------------------------------------------
         # Overall configurations
         self.CF = config
         self.CF.args_rs = get_args_rs_func()
         self.CF.args_op = get_args_op_func()
-        self.CF.args_ar = get_args_ar_func()
+        # self.CF.args_ar = get_args_ar_func()
         # For skeleton storage
         self.DS = Storage(self.CF)
         # For parsing sentences
@@ -672,8 +686,8 @@ class App():
                                           self.CF.enable_timer)
         self.ET.start()
         # 3. setup aagcn -------------------------------------------------------
-        with open(self.CF.args_ar.label_mapping_file, 'r') as f:
-            self.MAPPING = {int(i): j for i, j in json.load(f).items()}
+        # with open(self.CF.args_ar.label_mapping_file, 'r') as f:
+        #     self.MAPPING = {int(i): j for i, j in json.load(f).items()}
         # self.AR = ActionRecognition(self.CF.args_ar)
 
     def setup_realsense(self):
@@ -753,6 +767,7 @@ class App():
             self.CF.args_op.op_max_true_body,
             self.CF.valid_joints
         )
+        distance = self.DS.distance_between_2skel(avg_skels, raw_score)
         max_x = [round(i[0, :, 0].max(), 2) for i in avg_skels]
         max_y = [round(i[0, :, 1].max(), 2) for i in avg_skels]
         max_z = [round(i[0, :, 2].max(), 2) for i in avg_skels]
@@ -761,16 +776,28 @@ class App():
         y_dif = [round(i[0, :, 1].max() - i[0, :, 1].min(), 2)
                  for i in avg_skels]
         ratio = [round(j / i, 2) for i, j in zip(x_dif, y_dif)]
-        # adding data, predict, filter
+
         # # DL MODEL ------
         # self.AR.append_data(avg_skels, avg_score)
         # logits, prediction = self.AR.predict()
         # logits, prediction = self.DS.filter_action(
         #     logits, prediction)
+
+        num_joints = avg_skels.shape[2]
+        if num_joints == 11:
+            head = avg_skels[:, 0, 0]
+            hand_l = avg_skels[:, 0, 3]
+            hand_r = avg_skels[:, 0, 5]
+        elif num_joints == 15:
+            head = avg_skels[:, 0, 0]
+            hand_l = avg_skels[:, 0, 4]
+            hand_r = avg_skels[:, 0, 7]
+        else:
+            raise ValueError("Unknown number of joints...")
+
         # RULE BAESD -----
         logits = [0]
         prediction = 0
-
         # 1. Standing, d_ys > RULE_THRES_STAND (+ve)
         if max_dys[0] > self.CF.RULE_THRES_STAND:
             prediction = 2
@@ -807,7 +834,12 @@ class App():
             # "#Pose > 30% :", round((score > 0.3).sum(), 1), "|",
             "ID :", self.DS.ids, "|",
             "#Skels :", [len(s) for s in self.DS.avg_skels], "|",
-            [f'{round(a, 2):.2f}' for a in self.DS.action[-1]]
+            [f'{round(a, 2):.2f}' for a in self.DS.action[-1]], "|",
+            "Distance :", f'{round(distance, 2):.2f}' if len(avg_skels) > 1 else ''   # noqa
+            # [f'{round(i, 2):.2f}' for i in np.linalg.norm(avg_skels[0] - avg_skels[1], axis=1).tolist()]  # noqa
+            # "EAT :",
+            # [f'{round(i, 2):.2f}' for i in np.linalg.norm(hand_l - head, axis=1).tolist()],  # noqa
+            # [f'{round(i, 2):.2f}' for i in np.linalg.norm(hand_r - head, axis=1).tolist()]  # noqa
         )
         print(
             # "Logits :", [round(i*100, 1) for i in logits], "|",
@@ -964,8 +996,8 @@ if __name__ == "__main__":
                 depth_image = cv2.resize(depth_image, (color_image.shape[1],
                                                        color_image.shape[0]))
             # Remove the border pixels as measurements there are not good
-            color_image[:20, :, :] = 0
-            color_image[-20:, :, :] = 0
+            color_image[:20, :, :] = 0  # right border
+            color_image[-20:, :, :] = 0  # left border
             color_image[depth_image > 2800] = 0
             color_image[depth_image < 300] = 0
             # depth_colormap = rsw.frames[device_sn]['depth_color_framedata']
@@ -988,9 +1020,14 @@ if __name__ == "__main__":
                 continue
 
             with Timer("AR", app.CF.enable_timer, False) as t:
-                if len(app.DS.skeletons) > 0:
+                # if len(app.DS.skeletons) > 0:
+                if skel_added:
                     (raw_kypts, raw_score, avg_skels,
                      motion, prediction) = app.infer_action(c)
+                else:
+                    print(f'{c:04}',
+                          f"No skeletons... {len(app.DS.avg_skels)}",
+                          app.ET.PE.pyop.pose_scores)
 
             app.CF.recog_time = t.duration
             if app.CF.recog_time is None:
@@ -998,26 +1035,46 @@ if __name__ == "__main__":
 
             # Visualize results -----------
             if not MATPLOT:
-                assert op_image is not None
-                text_id, text, color = app.TP.text_parser(
-                    app.DS.ids[0], prediction, motion[0, 0])
-                op_image = app.visualize_output(
-                    op_image,
-                    raw_kypts[0, 0, 0],
+                _kpt = None
+                if skel_added:
+                    assert op_image is not None
+                    text_id, text, color = app.TP.text_parser(
+                        app.DS.ids[0], prediction, motion[0, 0])
+                    if raw_score[0, 0, 0] > 0.0:
+                        _kpt = raw_kypts[0, 0, 0]
+
+                else:
+                    assert op_image is not None
+                    op_image = np.zeros_like(op_image)
+                    text_id, text, color = app.TP.text_parser(-1, -1, -1)
+
+                print(text)
+                image = app.visualize_output(
+                    color_image,
+                    _kpt,
                     text,
                     color,
                     app.CF.args_rs.rs_vertical
                 )
-                cv2.imshow(f"est_{app.RS_INFO['device_sn']}", op_image)
-                key = cv2.waitKey(1)
-                # Press esc or 'q' to close the image window
-                if key & 0xFF == ord('q') or key == 27:
-                    cv2.destroyAllWindows()
-                    cv2.waitKey(5)
-                    break
+                if app.CF.args_rs.rs_vertical:
+                    op_image = np.rot90(op_image, -1).copy()
+                history = app.AH.step(color, text, text_id)
+                image = np.hstack(
+                    [image, VERTICAL_BAR,
+                     op_image, VERTICAL_BAR,
+                     history]
+                )
 
                 if OUTPUT_VIDEO is not None:
-                    OUTPUT_VIDEO.write(op_image)
+                    OUTPUT_VIDEO.write(image)
+                else:
+                    cv2.imshow(f"est_{app.RS_INFO['device_sn']}", image)
+                    key = cv2.waitKey(100)
+                    # Press esc or 'q' to close the image window
+                    if key & 0xFF == ord('q') or key == 27:
+                        cv2.destroyAllWindows()
+                        cv2.waitKey(1)
+                        break
 
             if MATPLOT:
                 # M, 1, V, C -> C, 1, V, M
@@ -1028,29 +1085,29 @@ if __name__ == "__main__":
                 app.visualize_3dplot(avg_skels, alpha, num_joint)
 
             # 8. printout ------------------------------------------------------
-            if c % app.CF.args_rs.rs_fps == 0:
-                # printout(
-                #     f"Step {c:12d} :: "
-                #     f"{[i.get('color_timestamp', None) for i in app.RS.frames.values()]} :: "  # noqa
-                #     f"{[i.get('depth_timestamp', None) for i in app.RS.frames.values()]}",  # noqa
-                #     'i'
-                # )
-                color_timestamp = list(app.RS.frames.values())[0].get('color_timestamp')  # noqa
-                fps['PE'].append(1/app.CF.infer_time)
-                fps['TK'].append(1/app.CF.track_time)
-                printout(
-                    f"Image : {color_timestamp} | "
-                    f"#Skel filtered : {app.CF.filered_skel} | "
-                    f"#Tracks : {len(app.ET.TK.tracks)} | "
-                    f"RS time : {app.CF.rs_time:.3f} | "
-                    f"Prep time : {app.CF.prep_time:.3f} | "
-                    f"Pose time : {app.CF.infer_time:.3f} | "
-                    f"Track time : {app.CF.track_time:.3f} | "
-                    f"Recog time : {app.CF.recog_time:.3f} | "
-                    f"FPS PE : {sum(fps['PE'])/len(fps['PE']):.3f} | "
-                    f"FPS TK : {sum(fps['TK'])/len(fps['TK']):.3f}",
-                    'i'
-                )
+            # if c % app.CF.args_rs.rs_fps == 0:
+            #     # printout(
+            #     #     f"Step {c:12d} :: "
+            #     #     f"{[i.get('color_timestamp', None) for i in app.RS.frames.values()]} :: "  # noqa
+            #     #     f"{[i.get('depth_timestamp', None) for i in app.RS.frames.values()]}",  # noqa
+            #     #     'i'
+            #     # )
+            #     color_timestamp = list(app.RS.frames.values())[0].get('color_timestamp')  # noqa
+            #     fps['PE'].append(1/app.CF.infer_time)
+            #     fps['TK'].append(1/app.CF.track_time)
+            #     printout(
+            #         f"Image : {color_timestamp} | "
+            #         f"#Skel filtered : {app.CF.filered_skel} | "
+            #         f"#Tracks : {len(app.ET.TK.tracks)} | "
+            #         f"RS time : {app.CF.rs_time:.3f} | "
+            #         f"Prep time : {app.CF.prep_time:.3f} | "
+            #         f"Pose time : {app.CF.infer_time:.3f} | "
+            #         f"Track time : {app.CF.track_time:.3f} | "
+            #         f"Recog time : {app.CF.recog_time:.3f} | "
+            #         f"FPS PE : {sum(fps['PE'])/len(fps['PE']):.3f} | "
+            #         f"FPS TK : {sum(fps['TK'])/len(fps['TK']):.3f}",
+            #         'i'
+            #     )
 
             if not len(app.RS.frames) > 0:
                 printout(f"Empty...", 'w')
