@@ -281,18 +281,25 @@ class Config():
         # TextParser -----------------------------------------------------------
         self.MOVE_THRES = 0.01
         # ActionHistory --------------------------------------------------------
-        self.BOX_LEFT_OFFSET = 20
-        self.BOX_TOP_OFFSET = 20
-        self.BOX_HEIGHT = 14
-        self.BOX_WIDTH = 30
-        self.NUM_LB = 800//self.BOX_HEIGHT
-        self.LB_OFFSET = 20
+        self.LOG_LEFT_OFFSET = 20
+        self.LOG_TOP_OFFSET = 20
+        self.LOG_HEIGHT = 14
+        self.LOG_WIDTH = 30
+        self.LOG_NUM_LB = 700//self.LOG_HEIGHT
+        self.LOG_LB_OFFSET = 20
+        self.BAR_LEFT_OFFSET = 0
+        self.BAR_TOP_OFFSET = CAMERA_W - 40
+        self.BAR_HEIGHT = 20
+        self.BAR_WIDTH = 1
+        self.BAR_NUM_LB = CAMERA_H*3//self.BAR_WIDTH
+        self.BAR_LB_OFFSET = 20
         # Rule based action ----------------------------------------------------
         self.RULE_THRES_STAND = 0.05
         self.RULE_THRES_STAND_LONG = 0.10
         self.RULE_THRES_SIT = -0.05
         self.RULE_THRES_SIT_LONG = -0.09
         self.RULE_THRES_FALL = -0.20
+        self.RULE_THRES_FALL_LONG = -0.40
         self.RULE_THRES_FALL_HEIGHT = 1.20
 
     @ property
@@ -538,12 +545,17 @@ class Storage():
 
 class TextParser():
     CM = {
-        "CYAN": (255, 255, 0),
-        "YELLOW": (0, 255, 255),
+        # "CYAN": (200, 1, 1),
+        "CYAN": (200, 200, 1),
+        # "CYAN": (255, 255, 1),
+        "YELLOW": (1, 255, 255),
         # https://colorcodes.io/red/comic-book-red-color-codes/
         "RED": (36, 29, 237),
-        "GREEN": (0, 255, 0),
-        "GRAY": (140, 140, 140),
+        "GREEN": (1, 255, 1),
+        "PALEGREEN": (100, 255, 100),
+        "SILVER": (192, 192, 192),
+        "GRAY": (50, 50, 50),
+        "WHITE": (255, 255, 255),
     }
 
     def __init__(self, config: Config, num_label=4, fps=15) -> None:
@@ -561,19 +573,19 @@ class TextParser():
         text = ""
         if prediction < 0:
             text = f"Nobody is around."
-            color = self.CM["YELLOW"]
+            color = self.CM["GRAY"]
             text_id = 0
         elif prediction == 0:
             moving = self.moving(movement)
             if moving:
                 text = f"Patient{p_id} is moving around."
-                color = self.CM["CYAN"]
+                color = self.CM["YELLOW"]
                 text_id = 1
                 self.counter[1] += 1
             else:
                 text = ""
                 # text = f"Patient{p_id} is not doing anything."
-                color = self.CM["GRAY"]
+                color = self.CM["SILVER"]
                 text_id = 2
                 self.counter[2] += 1
         else:
@@ -598,7 +610,7 @@ class TextParser():
                     self.counter[5] += 1
                 elif prediction == 4:
                     text = f"Patient{p_id} is being attended to."
-                    color = self.CM["CYAN"]
+                    color = self.CM["YELLOW"]
                     text_id = 6
                 elif prediction == 5:
                     text = f"Patient{p_id} is being checked."
@@ -620,47 +632,60 @@ class TextParser():
 
 class ActionHistory():
     def __init__(self, config: Config) -> None:
-        self.BOX_LEFT_OFFSET = config.BOX_LEFT_OFFSET
-        self.BOX_TOP_OFFSET = config.BOX_TOP_OFFSET
-        self.BOX_HEIGHT = config.BOX_HEIGHT
-        self.BOX_WIDTH = config.BOX_WIDTH
-        self.NUM_LB = config.NUM_LB
-        self.LB_OFFSET = config.LB_OFFSET
-        self.label = []
-        self.time_list = []
-        self.color_list = []
-        self.text_list = []
-        self.image_memory = None
+        self.LOG_LEFT_OFFSET = config.LOG_LEFT_OFFSET
+        self.LOG_TOP_OFFSET = config.LOG_TOP_OFFSET
+        self.LOG_HEIGHT = config.LOG_HEIGHT
+        self.LOG_WIDTH = config.LOG_WIDTH
+        self.LOG_NUM_LB = config.LOG_NUM_LB
+        self.LOG_LB_OFFSET = config.LOG_LB_OFFSET
+        self.BAR_LEFT_OFFSET = config.BAR_LEFT_OFFSET
+        self.BAR_TOP_OFFSET = config.BAR_TOP_OFFSET
+        self.BAR_HEIGHT = config.BAR_HEIGHT
+        self.BAR_WIDTH = config.BAR_WIDTH
+        self.BAR_NUM_LB = config.BAR_NUM_LB
+        self.BAR_LB_OFFSET = config.BAR_LB_OFFSET
+        self.log_label = []
+        self.log_time_list = []
+        self.log_color_list = []
+        self.log_text_list = []
+        self.log_image_memory = None
+        self.bar_label = [0 for _ in range(CAMERA_H*3)]
+        self.bar_color_list = [(0, 0, 0) for _ in range(CAMERA_H*3)]
+        self._gmtime = gmtime()
+        self.bar_time = [self._gmtime for _ in range(self.BAR_NUM_LB)]
+
+    def time(self) -> None:
+        self._gmtime = gmtime()
 
     def step(self, color: tuple, text: str, text_id: int) -> np.ndarray:
 
-        if len(self.label) > 0:
-            if text_id == self.label[-1]:
-                return self.image_memory
+        if len(self.log_label) > 0:
+            if text_id == self.log_label[-1]:
+                return self.log_image_memory
 
-        self.label = self.label[-self.NUM_LB:] + [text_id]
-        self.time_list = self.time_list[-self.NUM_LB:] + \
-            [f'{strftime("%y%m%d%H%M%S", gmtime())} : ']
-        self.color_list = self.color_list[-self.NUM_LB:] + [color]
-        self.text_list = self.text_list[-self.NUM_LB:] + [text]
+        self.log_label = self.log_label[-self.LOG_NUM_LB:] + [text_id]
+        self.log_time_list = self.log_time_list[-self.LOG_NUM_LB:] + \
+            [f'{strftime("%y%m%d-%H%M%S", self._gmtime)} : ']
+        self.log_color_list = self.log_color_list[-self.LOG_NUM_LB:] + [color]
+        self.log_text_list = self.log_text_list[-self.LOG_NUM_LB:] + [text]
 
         image = np.zeros((CAMERA_W, CAMERA_H, 3), dtype=np.uint8)
-        for idx, lab in enumerate(self.label):
-            top = self.BOX_TOP_OFFSET+(self.BOX_HEIGHT*idx)
-            btm = self.BOX_TOP_OFFSET+(self.BOX_HEIGHT*(idx+1))
+        for idx, lab in enumerate(self.log_label):
+            top = self.LOG_TOP_OFFSET+(self.LOG_HEIGHT*idx)
+            btm = self.LOG_TOP_OFFSET+(self.LOG_HEIGHT*(idx+1))
             cv2.rectangle(image,
-                          (self.BOX_LEFT_OFFSET, top),
-                          (self.BOX_LEFT_OFFSET+self.BOX_WIDTH, btm),
-                          self.color_list[idx], -1)
-            _text = self.time_list[idx]
-            _text += self.text_list[idx]
+                          (self.LOG_LEFT_OFFSET, top),
+                          (self.LOG_LEFT_OFFSET+self.LOG_WIDTH, btm),
+                          self.log_color_list[idx], -1)
+            _text = self.log_time_list[idx]
+            _text += self.log_text_list[idx]
             image = cv2.putText(
                 image,
                 _text,
-                (self.BOX_LEFT_OFFSET+self.BOX_WIDTH+self.LB_OFFSET, btm),
+                (self.LOG_LEFT_OFFSET+self.LOG_WIDTH+self.LOG_LB_OFFSET, btm),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.4,
-                self.color_list[idx],
+                self.log_color_list[idx],
                 1,
                 cv2.LINE_AA
             )
@@ -674,7 +699,66 @@ class ActionHistory():
         # cv2.imshow("a", rect)
         # cv2.waitKey(100)
 
-        self.image_memory = image
+        self.log_image_memory = image
+        return image
+
+    def step_bar(self,
+                 image: np.ndarray,
+                 color: tuple,
+                 text: str,
+                 text_id: int) -> np.ndarray:
+
+        self.bar_label = self.bar_label[-self.BAR_NUM_LB:] + [text_id]
+        self.bar_color_list = self.bar_color_list[-self.BAR_NUM_LB:] + [color]
+        self.bar_time = self.bar_time[-self.BAR_NUM_LB:] + [self._gmtime]
+        image_bar = np.ones_like(image)
+        for idx, lab in enumerate(self.bar_label):
+            left = self.BAR_LEFT_OFFSET+(self.BAR_WIDTH*idx)
+            right = self.BAR_LEFT_OFFSET+(self.BAR_WIDTH*(idx+1))
+            cv2.rectangle(image_bar,
+                          (left, self.BAR_TOP_OFFSET),
+                          (right, self.BAR_TOP_OFFSET+self.BAR_HEIGHT),
+                          self.bar_color_list[idx],
+                          -1)
+            if idx == 0:
+                continue
+            # if self.bar_time[idx].tm_min > self.bar_time[idx-1].tm_min:
+            #     text = f'{self.bar_time[idx].tm_min}'
+            if (self.bar_time[idx].tm_sec != self.bar_time[idx-1].tm_sec and
+                    self.bar_time[idx].tm_sec % 10 == 0):
+                text = f'{strftime("%y%m%d", self.bar_time[idx])}'
+                image = cv2.putText(
+                    image,
+                    text,
+                    (left+2, self.BAR_TOP_OFFSET-25),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.4,
+                    (255, 255, 255),
+                    1,
+                    cv2.LINE_AA
+                )
+                text = f'{strftime("%H%M%S", self.bar_time[idx])}'
+                image = cv2.putText(
+                    image,
+                    text,
+                    (left+2, self.BAR_TOP_OFFSET-10),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.4,
+                    (255, 255, 255),
+                    1,
+                    cv2.LINE_AA
+                )
+                image = cv2.line(
+                    image,
+                    (left, self.BAR_TOP_OFFSET-35),
+                    (left, self.BAR_TOP_OFFSET+self.BAR_HEIGHT),
+                    (255, 255, 255),
+                    2
+                )
+
+        mask = (image_bar-1).astype(bool)
+        # image[mask] = cv2.addWeighted(image, 0.1, image_bar, 0.9, 0)[mask]
+        image[mask] = image_bar[mask]
         return image
 
 
@@ -841,10 +925,13 @@ class App():
         # 1. Falling, ys < RULE_THRES_FALL_HEIGHT (+ve)
         if max_y[0] < self.CF.RULE_THRES_FALL_HEIGHT:
             prediction = 3
-        # 2. Falling, d_ys < RULE_THRES_FALL (-ve)
+        # 2a. Falling, d_ys < RULE_THRES_FALL (-ve)
         elif max_dys[0] < self.CF.RULE_THRES_FALL:
             prediction = 3
-        # 3. Sit, d_ys < RULE_THRES_SIT (-ve)
+        # 2b. Falling, d_ys < RULE_THRES_FALL_LONG (-ve)
+        elif max_dyl[0] < self.CF.RULE_THRES_FALL_LONG:
+            prediction = 3
+        # 3a. Sit, d_ys < RULE_THRES_SIT (-ve)
         elif max_dys[0] < self.CF.RULE_THRES_SIT:
             # 5.1. (Slowly) Falling, ys < RULE_THRES_FALL_HEIGHT (+ve)
             if max_y[0] < self.CF.RULE_THRES_FALL_HEIGHT:
@@ -852,7 +939,7 @@ class App():
             # 5.2. Sitting
             else:
                 prediction = 1
-        # 4. Sit, d_yl < RULE_THRES_SIT_LONG (-ve)
+        # 3b. Sit, d_yl < RULE_THRES_SIT_LONG (-ve)
         elif max_dyl[0] < self.CF.RULE_THRES_SIT_LONG:
             # 4.1. (Slowly) Falling, ys < RULE_THRES_FALL_HEIGHT (+ve)
             if max_y[0] < self.CF.RULE_THRES_FALL_HEIGHT:
@@ -860,17 +947,14 @@ class App():
             # 4.2. Sitting
             else:
                 prediction = 1
-        # 5. Standing, d_ys > RULE_THRES_STAND (+ve)
+        # 4a. Standing, d_ys > RULE_THRES_STAND (+ve)
         elif max_dys[0] > self.CF.RULE_THRES_STAND:
             prediction = 2
-        # 6. Standing, d_yl > RULE_THRES_STAND_LONG (+ve)
+        # 4b. Standing, d_yl > RULE_THRES_STAND_LONG (+ve)
         elif max_dyl[0] > self.CF.RULE_THRES_STAND_LONG:
             prediction = 2
-        # 7. two persons in the scene
-        print(len(self.DS.avg_skels))
+        # 5. two persons in the scene
         if len(self.DS.avg_skels) > 1:
-            print(len(self.DS.avg_skels[0]))
-            print(len(self.DS.avg_skels[1]))
             if len(self.DS.avg_skels[0]) > 5 and len(self.DS.avg_skels[1]) > 5:
                 if distance < 1.3:
                     prediction = 4
@@ -986,25 +1070,28 @@ class App():
                          op_image: Optional[np.ndarray] = None,
                          kpt: Optional[np.ndarray] = None,
                          prediction: int = -1,
+                         motion: np.ndarray | float = 0.,
+                         distance_str: str = '',
                          vertical: bool = False):
         depth_image = cv2.applyColorMap(
             cv2.convertScaleAbs(depth_image, alpha=0.06),
             cv2.COLORMAP_BONE
         )
         if op_image is not None and op_image.size > 0 and kpt is not None:
-            op_image[op_image.sum(-1) == 0] = depth_image[op_image.sum(-1) == 0]
+            op_image[op_image.sum(-1) ==
+                     0] = depth_image[op_image.sum(-1) == 0]
             self.valid_op_image[0] = 0
             self.valid_op_image[1] = op_image
-            text_id, text, color = app.TP.text_parser(
-                app.DS.ids[0], prediction, motion[0, 0])
+            text_id, text, color = self.TP.text_parser(
+                self.DS.ids[0], prediction, motion[0, 0])
         else:
             if (self.valid_op_image[1] is not None and
-                    self.valid_op_image[0] < app.CF.delay_counter):
+                    self.valid_op_image[0] < self.CF.delay_counter):
                 self.valid_op_image[0] += 1
                 op_image = self.valid_op_image[1]
             else:
                 op_image = depth_image
-            text_id, text, color = app.TP.text_parser(-1, -1, -1)
+            text_id, text, color = self.TP.text_parser(-1, -1, -1)
         if vertical:
             op_image = np.rot90(op_image, -1).copy()
         printout(text, 'i')
@@ -1035,12 +1122,16 @@ class App():
         if vertical:
             depth_image = np.rot90(depth_image, -1).copy()
         # 3. Right section
+        self.AH.time()
         history = self.AH.step(color, text, text_id)
         image = np.hstack(
             [color_image, VERTICAL_BAR,
              op_image, VERTICAL_BAR,
              history]
         )
+        # 4. Bottom running bar
+        image = self.AH.step_bar(image, color, text, text_id)
+
         cv2.putText(image,
                     "Distance : " + distance_str,
                     (10, CAMERA_W-10, ),
@@ -1127,6 +1218,7 @@ if __name__ == "__main__":
         distance_str = ""
         raw_kypts = None
         prediction = -1
+        motion = 0.
         with Timer("AR", app.CF.enable_timer, False) as t:
             # if len(app.DS.skeletons) > 0:
             if skel_added:
@@ -1152,6 +1244,8 @@ if __name__ == "__main__":
                 op_image,
                 raw_kypts,
                 prediction,
+                motion,
+                distance_str,
                 app.CF.args_rs.rs_vertical
             )
 
