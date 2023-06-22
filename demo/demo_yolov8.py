@@ -78,107 +78,6 @@ def get_args_rs():
     return args
 
 
-def get_args_op():
-    args, _ = get_op_parser().parse_known_args()
-    args.op_model_folder = "/usr/local/src/openpose/models/"
-    args.op_model_pose = "BODY_25"
-    args.op_net_resolution = "-1x368"
-    args.op_skel_thres = 0.2
-    args.op_max_true_body = 4
-    # args.op_heatmaps_add_parts = True
-    # args.op_heatmaps_add_bkg = True
-    # args.op_heatmaps_add_PAFs = True
-    args.op_save_skel_folder = ""
-    args.op_save_skel = False
-    args.op_save_skel_image = False
-    # For skel extraction/tracking in inference.py
-    args.op_input_color_image = ""
-    args.op_image_width = CAMERA_W
-    args.op_image_height = CAMERA_H
-    # # For 3d skel extraction
-    args.op_patch_offset = 3
-    # # For 3d skel extraction
-    # args.op_extract_3d_skel = False
-    # args.op_save_3d_skel = False
-    args.op_display = 1.0
-    # args.op_display_depth = 0  # Not used
-    # For skel extraction/tracking in inference_rs.py
-    args.op_rs_dir = "data/mot17"
-    args.op_rs_delete_image = False
-    args.op_save_track_image = False
-    args.op_proc = "sp"
-    # args.op_track_deepsort = True
-    args.op_track_bytetrack = True
-    # args.op_track_ocsort = True
-    # args.op_track_strongsort = True
-    args.op_track_buffer = 30
-    args.bytetracker_trackthresh = 0.2
-    # args.bytetracker_trackbuffer = 30  # overwritten by op_track_buffer
-    args.bytetracker_matchthresh = 0.9  # this is for (1-iou)
-    args.bytetracker_mot20 = False
-    args.bytetracker_fps = FPS
-    print("========================================")
-    print(">>>>> args_op <<<<<")
-    print("========================================")
-    for k, v in vars(args).items():
-        print(f"{k} : {v}")
-    print("========================================")
-    return args
-
-
-def get_args_ar():
-    init_seed(1)
-    # label_mapping_file = "/data/07_AAGCN/model/ntu_15j/index_to_name.json"
-    # label_mapping_file = "/data/07_AAGCN/model/ntu_15j_9l/index_to_name.json"
-    # label_mapping_file = "/data/07_AAGCN/model/ntu_15j_5l/index_to_name.json"
-    label_mapping_file = "/data/07_AAGCN/model/ntu_15j_4l/index_to_name.json"
-    # weights = "/data/07_AAGCN/data/openpose_b25_j15_ntu_result/xview/aagcn_preprocess_sgn_model/230414100001/weight/SGN-116-68208.pt"  # noqa
-    # weights = "/data/07_AAGCN/data/openpose_b25_j15_9l_ntu_result/xview/aagcn_preprocess_sgn_model/230414100001/weight/SGN-110-10670.pt"  # noqa
-    # weights = "/data/07_AAGCN/data/openpose_b25_j15_5l_ntu_result/xview/aagcn_preprocess_sgn_model/230511130001/weight/SGN-120-8160.pt"  # noqa
-    # weights = "/data/07_AAGCN/data/openpose_b25_j15_4l_ntu_result/xview/aagcn_preprocess_sgn_model/230512123001/weight/SGN-66-3168.pt"  # noqa
-    # weights = "/data/07_AAGCN/data/openpose_b25_j15_4l_ntu_result/xsub/aagcn_preprocess_sgn_model/230512123001/weight/SGN-112-5824.pt"  # noqa
-    weights = "/data/07_AAGCN/data/openpose_b25_j11_4l_ntu_result/xview/aagcn_preprocess_sgn_model/230517123001/weight/SGN-94-4512.pt"  # noqa
-    # weights = "/data/07_AAGCN/data/openpose_b25_j11_4l_ntu_result/xsub/aagcn_preprocess_sgn_model/230517123001/weight/SGN-82-4264.pt"  # noqa
-    # weights = "/data/07_AAGCN/data/openpose_b25_j15_5l_ntu_result/xview/aagcn_joint/230511130001/weight/Model-40-2720.pt"  # noqa
-    # weights = "/data/07_AAGCN/data/openpose_b25_j15_ntu_result/xview/aagcn_joint/230414100001/weight/Model-50-29400.pt"  # noqa
-    # weights = "/data/07_AAGCN/data/openpose_b25_j15_9l_ntu_result/xview/aagcn_joint/230414100001/weight/Model-50-4850.pt"  # noqa
-    # config = "/data/07_AAGCN/data/openpose_b25_j15_ntu_result/xview/aagcn_preprocess_sgn_model/230414100001/config.yaml"  # noqa
-    # config = "/data/07_AAGCN/data/openpose_b25_j15_9l_ntu_result/xview/aagcn_preprocess_sgn_model/230414100001/config.yaml"  # noqa
-    # config = "/data/07_AAGCN/data/openpose_b25_j15_5l_ntu_result/xview/aagcn_preprocess_sgn_model/230511130001/config.yaml"  # noqa
-    # config = "/data/07_AAGCN/data/openpose_b25_j15_4l_ntu_result/xview/aagcn_preprocess_sgn_model/230512123001/config.yaml"  # noqa
-    # config = "/data/07_AAGCN/data/openpose_b25_j15_4l_ntu_result/xsub/aagcn_preprocess_sgn_model/230512123001/config.yaml"  # noqa
-    config = "/data/07_AAGCN/data/openpose_b25_j11_4l_ntu_result/xview/aagcn_preprocess_sgn_model/230517123001/config.yaml"  # noqa
-    # config = "/data/07_AAGCN/data/openpose_b25_j11_4l_ntu_result/xsub/aagcn_preprocess_sgn_model/230517123001/config.yaml"  # noqa
-    # config = "/data/07_AAGCN/data/openpose_b25_j15_5l_ntu_result/xview/aagcn_joint/230511130001/config.yaml"  # noqa
-    # config = "/data/07_AAGCN/data/openpose_b25_j15_ntu_result/xview/aagcn_joint/230414100001/config.yaml"  # noqa
-    # config = "/data/07_AAGCN/data/openpose_b25_j15_9l_ntu_result/xview/aagcn_joint/230414100001/config.yaml"  # noqa
-    parser = get_ar_parser()
-    parser.set_defaults(**{'config': config})
-    args = load_parser_args_from_config(parser)
-    args.weights = weights
-    args.max_frame = 60
-    args.max_num_skeleton_true = 2
-    args.max_num_skeleton = 4
-    args.num_joint = 11
-    args.gpu = True
-    args.timing = False
-    args.interval = 0
-    args.moving_avg = 1
-    args.aagcn_normalize = True
-    args.sgn_preprocess = True
-    args.multi_test = 5
-    # args.data_path = data_path
-    args.label_mapping_file = label_mapping_file
-    # args.out_folder = "/data/07_AAGCN/data_tmp/delme"
-    print("========================================")
-    print(">>>>> args_ar <<<<<")
-    print("========================================")
-    for k, v in vars(args).items():
-        print(f"{k} : {v}")
-    print("========================================")
-    return args
-
-
 def transform_3dpose(joints3d, depth_scale):
     # # 230511
     # matrix_z = np.array(
@@ -300,17 +199,6 @@ class Config():
         self.RULE_THRES_FALL_LONG = -0.20
         self.RULE_THRES_FALL_HEIGHT = 1.30
 
-    @ property
-    def valid_joints(self):
-        # assert self.args_ar is not None
-        if self.args_ar is not None:
-            if self.args_ar.num_joint == 11:
-                return [0, 1, 2, 3, 5, 6, 8, 9, 10, 12, 13]
-            else:
-                return [i for i in range(self.args_ar.num_joint)]
-        else:
-            return [0, 1, 2, 3, 5, 6, 8, 9, 10, 12, 13]
-
 
 class App(AppBase):
     def __init__(self) -> None:
@@ -333,36 +221,16 @@ class App(AppBase):
     def setup(self,
               config: Config,
               get_args_rs_func: Callable = get_args_rs,
-              get_args_op_func: Callable = get_args_op,
-              get_args_ar_func: Callable = get_args_ar
               ) -> None:
-        # 1. args + setup ------------------------------------------------------
         # Overall configurations
         self.CF = config
         self.CF.args_rs = get_args_rs_func()
-        self.CF.args_op = get_args_op_func()
-        # self.CF.args_ar = get_args_ar_func()
         # For skeleton storage
         self.DS = Storage(self.CF)
         # For parsing sentences
         self.TP = TextParser(self.CF, fps=self.CF.args_rs.rs_fps)
         # Tracks previous action predictionsd
         self.AH = ActionHistory(self.CF)
-        # 2. Setup extract and track classes -----------------------------------
-        # PoseExtractor = OpenPosePoseExtractor(self.CF.args_op)
-        # PoseTracker = Tracker(
-        #     self.CF.args_op,
-        #     self.CF.args_op.op_track_buffer//(self.CF.delay_switch+1)
-        # )
-        # self.ET = ExtractSkeletonAndTrack(self.CF.args_op,
-        #                                   PoseExtractor,
-        #                                   PoseTracker,
-        #                                   self.CF.enable_timer)
-        # self.ET.start()
-        # 3. setup aagcn -------------------------------------------------------
-        # with open(self.CF.args_ar.label_mapping_file, 'r') as f:
-        #     self.MAPPING = {int(i): j for i, j in json.load(f).items()}
-        # self.AR = ActionRecognition(self.CF.args_ar)
 
     def infer_pose_and_track(self, color_image, depth_image):
         if not hasattr(self.YOLO_POS.predictor, 'trackers'):
@@ -376,7 +244,7 @@ class App(AppBase):
         results_seg = self.YOLO_SEG(
             source=rot_color_image.copy(),
             imgsz=640,
-            classes=[0, 41],
+            classes=[0, 39, 41, 45, 73],
             max_det=10,
             iou=0.5,
             conf=0.25,
@@ -427,13 +295,14 @@ class App(AppBase):
                 pose_result[:, 2]
             )
             pose_image = result_seg.plot(img=pose_image,
-                                         boxes=False,
+                                         boxes=True,
                                          masks=True)
             pose_image = result_pos.plot(img=pose_image,
                                          boxes=True,
                                          masks=False)
             skel_added = True
 
+        # print([round(i, 2) for i in result_pos.keypoints.conf.tolist()[0]])
         self.DS.check_valid_and_delete()
 
         if self.CF.args_rs.rs_vertical:
@@ -536,6 +405,15 @@ if __name__ == "__main__":
                 distance_str,
                 app.CF.args_rs.rs_vertical
             )
+            # Face sensor
+            if raw_kypts is not None:
+                pos = raw_kypts.astype(int)[:, 0, :5, :]  # [M, V, 2]
+                if app.CF.args_rs.rs_vertical:
+                    pos = np.flip(pos)
+                    pos[:, :, 0] = CAMERA_H - pos[:, :, 0]
+                for pos_i in pos:
+                    for pos_i_v in pos_i:
+                        cv2.circle(image, pos_i_v, 20, (255, 255, 255), -1)
 
             # Unblur blur due to resize to fullscreen:
             # https://stackoverflow.com/questions/4993082/how-can-i-sharpen-an-image-in-opencv

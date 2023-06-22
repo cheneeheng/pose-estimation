@@ -303,7 +303,7 @@ class Config():
         self.RULE_THRES_FALL_HEIGHT = 1.20
 
     @ property
-    def valid_joints(self):
+    def valid_joints(self) -> list:
         # assert self.args_ar is not None
         if self.args_ar is not None:
             if self.args_ar.num_joint == 11:
@@ -456,7 +456,7 @@ class Storage():
         else:
             return prediction
 
-    def get_last_skel(self, max_body=None, valid_joints=None):
+    def get_last_skel(self, valid_joints=None):
         raw_kypts, avg_kypts = [], []
         raw_skels, avg_skels = [], []
         raw_score, avg_score = [], []
@@ -469,7 +469,7 @@ class Storage():
             avg_skels_m = self.avg_skels[m]
             raw_score_m = self.raw_score[m]
             avg_score_m = self.avg_score[m]
-            if max_body is not None or valid_joints is not None:
+            if valid_joints is not None:
                 raw_kypts_m = [i[valid_joints, :] for i in raw_kypts_m]
                 avg_kypts_m = [i[valid_joints, :] for i in avg_kypts_m]
                 raw_skels_m = [i[valid_joints, :] for i in raw_skels_m]
@@ -879,16 +879,17 @@ class App():
         )
         return status, op_image, skel_added
 
-    def infer_action(self, c=0):
+    def infer_action(self,
+                     c=0,
+                     valid_joints: list | None = None,
+                     custom_fn: Callable | None = None):
         # # data : M, 1, V, C
         # _, kpt, data, score = datastorage.get_last_skel()
+        last_skel = self.DS.get_last_skel(valid_joints)
         (raw_kypts, avg_kypts,
          raw_skels, avg_skels,
          raw_score, avg_score,
-         motion, max_dys, max_dyl) = self.DS.get_last_skel(
-            self.CF.args_op.op_max_true_body,
-            self.CF.valid_joints
-        )
+         motion, max_dys, max_dyl) = last_skel
         distance = self.DS.distance_between_2skel(avg_skels, raw_score)
         distance_str = f"{f'{round(distance, 2):.2f}' if len(avg_skels) > 1 else ''}"  # noqa
         max_x = [round(i[0, :, 0].max(), 2) for i in avg_skels]
@@ -907,17 +908,19 @@ class App():
         # logits, prediction = self.DS.filter_action(
         #     logits, prediction)
 
-        num_joints = avg_skels.shape[2]
-        if num_joints == 11:
-            head = avg_skels[:, 0, 0]
-            hand_l = avg_skels[:, 0, 3]
-            hand_r = avg_skels[:, 0, 5]
-        elif num_joints == 15:
-            head = avg_skels[:, 0, 0]
-            hand_l = avg_skels[:, 0, 4]
-            hand_r = avg_skels[:, 0, 7]
-        else:
-            raise ValueError("Unknown number of joints...")
+        if custom_fn is not None:
+            custom_output = custom_fn(last_skel)
+        # num_joints = avg_skels.shape[2]
+        # if num_joints == 11:
+        #     head = avg_skels[:, 0, 0]
+        #     hand_l = avg_skels[:, 0, 3]
+        #     hand_r = avg_skels[:, 0, 5]
+        # elif num_joints == 15:
+        #     head = avg_skels[:, 0, 0]
+        #     hand_l = avg_skels[:, 0, 4]
+        #     hand_r = avg_skels[:, 0, 7]
+        # else:
+        #     raise ValueError("Unknown number of joints...")
 
         # RULE BAESD -----
         logits = [0]
@@ -1111,13 +1114,13 @@ class App():
                                       color,
                                       1,
                                       cv2.LINE_AA)
-        if kpt is not None:
-            pos = kpt.astype(int)[:, 0, 0, :]  # [M, 2]
-            if vertical:
-                pos = np.flip(pos)
-                pos[:, 0] = CAMERA_H - pos[:, 0]
-            for pos_i in pos:
-                cv2.circle(color_image, pos_i, 20, (255, 255, 255), -1)
+        # if kpt is not None:
+        #     pos = kpt.astype(int)[:, 0, 0, :]  # [M, 2]
+        #     if vertical:
+        #         pos = np.flip(pos)
+        #         pos[:, 0] = CAMERA_H - pos[:, 0]
+        #     for pos_i in pos:
+        #         cv2.circle(color_image, pos_i, 10, (255, 255, 255), -1)
         # 2. Middle section
         if vertical:
             depth_image = np.rot90(depth_image, -1).copy()
@@ -1223,7 +1226,10 @@ if __name__ == "__main__":
             # if len(app.DS.skeletons) > 0:
             if skel_added:
                 (raw_kypts, raw_score, avg_skels,
-                    motion, prediction, distance_str) = app.infer_action(c)
+                    motion, prediction, distance_str) = app.infer_action(
+                        c,
+                        app.CF.valid_joints
+                )
             else:
                 printout(f'{c:04} No skeletons... '
                          f'{len(app.DS.avg_skels)} '
@@ -1248,6 +1254,14 @@ if __name__ == "__main__":
                 distance_str,
                 app.CF.args_rs.rs_vertical
             )
+            # Face sensor
+            if raw_kypts is not None:
+                pos = raw_kypts.astype(int)[:, 0, 0, :]  # [M, 2]
+                if app.CF.args_rs.rs_vertical:
+                    pos = np.flip(pos)
+                    pos[:, 0] = CAMERA_H - pos[:, 0]
+                for pos_i in pos:
+                    cv2.circle(color_image, pos_i, 10, (255, 255, 255), -1)
 
             # Unblur blur due to resize to fullscreen:
             # https://stackoverflow.com/questions/4993082/how-can-i-sharpen-an-image-in-opencv

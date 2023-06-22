@@ -249,7 +249,7 @@ class PyOpenPoseNativeBase:
         if boxes is not None:
             for idx, bb in enumerate(boxes):
                 tl, br = bb[0:2], bb[2:4]
-                image = cv2.rectangle(image, tl, br, (0, 255, 0), 2)
+                image = cv2.rectangle(image, tl, br, (0, 125, 0), 2)
         return image
 
     @staticmethod
@@ -265,19 +265,29 @@ class PyOpenPoseNativeBase:
                     except AttributeError:
                         # bytetrack
                         bb = track.tlbr
-                    l, t, r, b = bb
-                    tl = (np.floor(l).astype(int), np.floor(t).astype(int))
-                    br = (np.ceil(r).astype(int), np.ceil(b).astype(int))
-                    image = cv2.rectangle(image, tl, br,
-                                          get_color(track.track_id), 2)
-                    cv2.putText(image,
-                                f"ID : {track.track_id}",
-                                tl,
-                                cv2.FONT_HERSHEY_PLAIN,
-                                2,
-                                get_color(track.track_id),
-                                2,
-                                cv2.LINE_AA)
+                    try:
+                        l, t, r, b = bb
+                        tl = (np.floor(l).astype(int), np.floor(t).astype(int))
+                        br = (np.ceil(r).astype(int), np.ceil(b).astype(int))
+                        (x1, y1), (x2, y2) = tl, br
+                        sub_img = image[y1:y2, x1:x2]
+                        rect = (np.ones(sub_img.shape, dtype=np.uint8) *
+                                # np.array(get_color(track.track_id), dtype=np.uint8))  # noqa
+                                np.array((60, 130, 0), dtype=np.uint8))
+                        res = cv2.addWeighted(sub_img, 0.5, rect, 0.5, 1.0)
+                        image[y1:y2, x1:x2] = res
+                        # image = cv2.rectangle(image, tl, br,
+                        #                       get_color(track.track_id), 3)
+                        cv2.putText(image,
+                                    f"ID : {track.track_id}",
+                                    tl,
+                                    cv2.FONT_HERSHEY_PLAIN,
+                                    2,
+                                    get_color(track.track_id),
+                                    2,
+                                    cv2.LINE_AA)
+                    except TypeError:
+                        pass
         return image
 
     def display(self,
@@ -386,29 +396,29 @@ class PyOpenPoseNative(PyOpenPoseNativeBase):
 
         params["scale_number"] = 1
         params["body"] = 1
-        params["posenet_only"] = False
-        params["custom_net_input_layer"] = ""
-        params["custom_net_output_layer"] = ""
+        # params["posenet_only"] = False
+        # params["custom_net_input_layer"] = ""
+        # params["custom_net_output_layer"] = ""
         self.params = params.copy()
 
         # Get heatmap from certain layer in caffe model
         params["scale_number"] = 1
         params["body"] = 1
-        params["posenet_only"] = True
+        # params["posenet_only"] = True
         # saves heatmaps in unscaled size. Not used if posenet_only=True
         # params["upsampling_ratio"] = 1
-        params["custom_net_input_layer"] = ""
-        params["custom_net_output_layer"] = "pool3_stage1"
+        # params["custom_net_input_layer"] = ""
+        # params["custom_net_output_layer"] = "pool3_stage1"
         self.params_cout = params.copy()
 
         # Get keypoints from heatmaps
         params["scale_number"] = 1
         params["body"] = 1  # 2 to Disable OP Network
-        params["posenet_only"] = False
+        # params["posenet_only"] = False
         # saves heatmaps in unscaled size. Not used if posenet_only=True
         # params["upsampling_ratio"] = 0  # 0 rescales to input image size
-        params["custom_net_input_layer"] = "pool3_stage1"
-        params["custom_net_output_layer"] = ""
+        # params["custom_net_input_layer"] = "pool3_stage1"
+        # params["custom_net_output_layer"] = ""
         self.params_cin = params.copy()
 
         self.opWrapper = op.WrapperPython()
