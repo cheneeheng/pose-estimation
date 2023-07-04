@@ -1,5 +1,6 @@
 import argparse
 import os
+import cv2
 import time
 import traceback
 import sys
@@ -92,8 +93,8 @@ class PoseHeatMapExtractionMultithreading:
 
 
 def extract_pose_from_heatmaps(base_path: str,
-                               op_args: argparse.Namespace):
-
+                               op_args: argparse.Namespace,
+                               display_pose: bool = False):
     PE = OpenPosePoseExtractor(op_args)
     PE.pyop.configure(PE.pyop.params_cin)
 
@@ -109,20 +110,39 @@ def extract_pose_from_heatmaps(base_path: str,
 
             path = f"{device}/{trial}/heatmap"
             path = os.path.join(base_path, path)
-            hm_files = [os.path.join(path, i) for i in os.listdir(path)]
+            hm_files = [os.path.join(path, i)
+                        for i in sorted(os.listdir(path))]
 
-            for hm_file in hm_files:
+            path = f"{device}/{trial}/depth"
+            path = os.path.join(base_path, path)
+            depth_files = [os.path.join(path, i)
+                           for i in sorted(os.listdir(path))]
+
+            for hm_file, depth_file in zip(hm_files, depth_files):
                 hm = np.fromfile(hm_file, np.float32)
                 hm = [hm[5:].reshape(int(hm[1]), int(
                     hm[2]), int(hm[3]), int(hm[4]))]
                 PE.predict_from_hm(
-                    image=np.zeros((480, 848, 3)),
+                    image=np.zeros((op_args.op_image_height,
+                                    op_args.op_image_width, 3)),
                     heatmap=hm,
                     kpt_save_path=hm_file.replace(
                         "/heatmap", "/skeleton_fromheatmap"
                     ).replace(".float", ".txt")
                 )
-                PE.display(win_name=device, speed=1)
+
+                if display_pose:
+                    _, image = PE.display()
+                    depth_colormap = cv2.applyColorMap(
+                        cv2.convertScaleAbs(np.load(depth_file), alpha=0.03),
+                        cv2.COLORMAP_JET)
+                    output_image = np.concatenate([image, depth_colormap], 0)
+                    cv2.imshow(device, output_image)
+                    key = cv2.waitKey(0)
+                    if key & 0xFF == ord('q') or key == 27:
+                        cv2.destroyAllWindows()
+                        cv2.waitKey(5)
+                        break
 
     printout(f"Finished...", 'i')
 

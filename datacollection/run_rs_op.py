@@ -55,6 +55,10 @@ if __name__ == "__main__":
                    type=str,
                    default="",
                    help='path to saved rs data')
+    p.add_argument('--display-pose',
+                   type=str2bool,
+                   default=False,
+                   help='')
     p.add_argument('--save-heatmaps',
                    type=str2bool,
                    default=False,
@@ -65,7 +69,8 @@ if __name__ == "__main__":
     op_args = get_op_args()
 
     if len(args.extract_pose) != 0:
-        extract_pose_from_heatmaps(args.extract_pose, op_args)
+        extract_pose_from_heatmaps(args.extract_pose, op_args,
+                                   args.display_pose)
     elif args.save_heatmaps:
         save_heatmaps(rs_args, op_args)
     else:
