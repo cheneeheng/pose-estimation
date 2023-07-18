@@ -228,17 +228,42 @@ def transform_3dpose(joints3d, depth_scale):
     #      [0.94602187, -0.01580074,  0.32371742],
     #      [-0.31116032, -0.32371742,  0.89352464]]
     # )
-    # 23.06.06
+    # # 23.06.06
+    # matrix_z = np.array(
+    #     [[0.05289203, -0.97412245, -0.21974503],
+    #      [0.97412245,  0.00190747,  0.22601284],
+    #      [-0.21974503, -0.22601284,  0.94901545]]
+    # )
+    # joints3d += np.array([-2150, -700, 0])*depth_scale
+    # # joints3d += np.array([-1300, -800, 500])*depth_scale
+    # joints3d = (matrix_z@joints3d.transpose()).transpose()
+    # # joints3d[:, 0] *= -1.
+    # joints3d[:, 1] *= -1.  # to be ntu compat
+    # return joints3d
+    # 23.06.25
+    # matrix_z = np.array(
+    #     [[0.19731029,  0.86077523,  0.4691851],
+    #      [-0.86077523, -0.07693598,  0.50313702],
+    #      [0.4691851,  -0.50313702,  0.72575373]]
+    # )
+    # joints3d += np.array([4000, -3000, 0])*depth_scale
+    # # joints3d += np.array([-1300, -800, 500])*depth_scale
+    # joints3d = (matrix_z@joints3d.transpose()).transpose()
+    # # joints3d[:, 0] *= -1.
+    # joints3d[:, 1] *= -1.  # to be ntu compat
+
+    # 23.06.26
     matrix_z = np.array(
-        [[0.05289203, -0.97412245, -0.21974503],
-         [0.97412245,  0.00190747,  0.22601284],
-         [-0.21974503, -0.22601284,  0.94901545]]
+        [[0.4405984,   0.71502632,  0.54278027],
+         [-0.71502632, -0.0860544,   0.69378095],
+         [0.54278027, -0.69378095,  0.4733472]]
     )
-    joints3d += np.array([-2150, -700, 0])*depth_scale
+    joints3d += np.array([4500, -2000, 0])*depth_scale
     # joints3d += np.array([-1300, -800, 500])*depth_scale
     joints3d = (matrix_z@joints3d.transpose()).transpose()
     # joints3d[:, 0] *= -1.
     joints3d[:, 1] *= -1.  # to be ntu compat
+
     return joints3d
 
 
@@ -295,7 +320,7 @@ class Config():
         self.BAR_LB_OFFSET = 20
         # Rule based action ----------------------------------------------------
         self.RULE_THRES_STAND = 0.05
-        self.RULE_THRES_STAND_LONG = 0.10
+        self.RULE_THRES_STAND_LONG = 0.30
         self.RULE_THRES_SIT = -0.05
         self.RULE_THRES_SIT_LONG = -0.09
         self.RULE_THRES_FALL = -0.20
@@ -527,7 +552,10 @@ class Storage():
                 del_idx.append(i)
             self.valid[i] = False
         for i in del_idx:
-            self.delete(i)
+            try:
+                self.delete(i)
+            except IndexError:
+                continue
 
     def reset(self):
         num_data = len(self.counter)
@@ -554,7 +582,7 @@ class TextParser():
         "GREEN": (1, 255, 1),
         "PALEGREEN": (100, 255, 100),
         "SILVER": (192, 192, 192),
-        "GRAY": (50, 50, 50),
+        "GRAY": (100, 100, 100),
         "WHITE": (255, 255, 255),
     }
 
@@ -562,7 +590,7 @@ class TextParser():
         self.MOVE_THRES = config.MOVE_THRES
         self.num_label = num_label
         self.fps = fps
-        self.counter = [0 for _ in range(8)]
+        self.counter = [0 for _ in range(9)]
         self.last_text_id = -1
 
     def moving(self, movement):
@@ -573,7 +601,7 @@ class TextParser():
         text = ""
         if prediction < 0:
             text = f"Nobody is around."
-            color = self.CM["GRAY"]
+            color = self.CM["RED"]
             text_id = 0
         elif prediction == 0:
             moving = self.moving(movement)
@@ -584,7 +612,7 @@ class TextParser():
                 self.counter[1] += 1
             else:
                 text = ""
-                # text = f"Patient{p_id} is not doing anything."
+                text = f"Patient{p_id} is idling."
                 color = self.CM["SILVER"]
                 text_id = 2
                 self.counter[2] += 1
@@ -610,12 +638,16 @@ class TextParser():
                     self.counter[5] += 1
                 elif prediction == 4:
                     text = f"Patient{p_id} is being attended to."
-                    color = self.CM["YELLOW"]
+                    color = self.CM["GREEN"]
                     text_id = 6
                 elif prediction == 5:
                     text = f"Patient{p_id} is being checked."
-                    color = self.CM["GREEN"]
+                    color = self.CM["YELLOW"]
                     text_id = 7
+                elif prediction == 6:
+                    text = f"Patient{p_id} is happy."
+                    color = self.CM["GREEN"]
+                    text_id = 8
                 # else:
                 #     text = ""
                 #     color = self.CM["GRAY"]
@@ -834,16 +866,19 @@ class App():
             self.CF.delay_counter -= 1
             self.ET.TK.no_measurement_predict_and_update()
             for track in self.ET.TK.tracks:
-                if track.is_activated:
-                    # append the last raw skeleton
-                    _sid = self.DS.ids.index(track.track_id)
-                    self.DS.add(
-                        track.track_id,
-                        self.DS.raw_kypts[_sid][-1],
-                        self.DS.raw_skels[_sid][-1],
-                        self.DS.raw_score[_sid][-1]
-                    )
-                    skel_added = True
+                try:
+                    if track.is_activated:
+                        # append the last raw skeleton
+                        _sid = self.DS.ids.index(track.track_id)
+                        self.DS.add(
+                            track.track_id,
+                            self.DS.raw_kypts[_sid][-1],
+                            self.DS.raw_skels[_sid][-1],
+                            self.DS.raw_score[_sid][-1]
+                        )
+                        skel_added = True
+                except ValueError:
+                    continue
         else:
             self.CF.delay_counter = self.CF.delay_switch
             # infer pose and track ---------------------------------------------
@@ -868,7 +903,7 @@ class App():
                             self.ET.PE.pyop.pose_keypoints[track.det_id][:, 2]
                         )
                         skel_added = True
-            self.DS.check_valid_and_delete()
+        self.DS.check_valid_and_delete()
         status, op_image = self.ET.PE.display(
             win_name=f"est_{self.RS_INFO['device_sn']}",
             speed=self.CF.display_speed,
@@ -963,7 +998,20 @@ class App():
                     prediction = 4
                 else:
                     prediction = 5
-        logits = np.zeros(6)
+
+        last_skel = self.DS.get_last_skel()
+
+        (_, _,
+         raw_skels, _,
+         _, _,
+         _, _, _) = last_skel
+        # print(raw_skels[0,0,0,2].shape)
+        if raw_skels[0, 0, 9, 2] > raw_skels[0, 0, 0, 2]:
+            prediction = 6
+        if raw_skels[0, 0, 10, 2] > raw_skels[0, 0, 0, 2]:
+            prediction = 6
+
+        logits = np.zeros(7)
         logits[prediction] = 1.0
         prediction = self.DS.filter_action(logits, prediction)
         printout(
@@ -1096,11 +1144,11 @@ class App():
                 op_image = depth_image
             text_id, text, color = self.TP.text_parser(-1, -1, -1)
         if vertical:
-            op_image = np.rot90(op_image, -1).copy()
+            op_image = np.rot90(op_image, 1).copy()
         printout(text, 'i')
         # 1. Left section
         if vertical:
-            color_image = np.rot90(color_image, -1).copy()
+            color_image = np.rot90(color_image, 1).copy()
         crop = color_image[:50, :]
         black_rect = np.zeros(crop.shape, dtype=np.uint8)
         overlay = cv2.addWeighted(crop, 0.3, black_rect, 0.7, 1.0)
@@ -1123,7 +1171,7 @@ class App():
         #         cv2.circle(color_image, pos_i, 10, (255, 255, 255), -1)
         # 2. Middle section
         if vertical:
-            depth_image = np.rot90(depth_image, -1).copy()
+            depth_image = np.rot90(depth_image,  1).copy()
         # 3. Right section
         self.AH.time()
         history = self.AH.step(color, text, text_id)
@@ -1135,14 +1183,14 @@ class App():
         # 4. Bottom running bar
         image = self.AH.step_bar(image, color, text, text_id)
 
-        cv2.putText(image,
-                    "Distance : " + distance_str,
-                    (10, CAMERA_W-10, ),
-                    cv2.FONT_HERSHEY_PLAIN,
-                    3,
-                    (0, 0, 200),
-                    2,
-                    cv2.LINE_AA)
+        # cv2.putText(image,
+        #             "Distance : " + distance_str,
+        #             (10, CAMERA_W-10, ),
+        #             cv2.FONT_HERSHEY_PLAIN,
+        #             3,
+        #             (0, 0, 200),
+        #             2,
+        #             cv2.LINE_AA)
         return image
 
 

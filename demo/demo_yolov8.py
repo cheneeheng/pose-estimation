@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import time
+import torch
 
 # ultralytics.yolo.cfg.default.yaml
 from ultralytics import YOLO
@@ -10,18 +11,11 @@ from typing import Callable
 from rs_py.rs_run_devices import get_rs_parser
 from rs_py.rs_run_devices import printout
 
-from openpose.native.python.inference_rs import get_parser as get_op_parser
 from openpose.native.python.skeleton import PyOpenPoseNative
 from openpose.native.python.utils import Timer
 
-from utils.parser import get_parser as get_ar_parser
-from utils.parser import load_parser_args_from_config
-from utils.utils import init_seed
-from utils.visualization import visualize_3dskeleton_in_matplotlib
-from utils.visualization import visualize_3dskeleton_in_matplotlib_step
-
 from demo import App as AppBase
-from demo import TextParser, ActionHistory, Storage
+from demo import TextParser, ActionHistory, Storage, transform_3dpose
 
 
 FPS = 30
@@ -48,10 +42,9 @@ MATPLOT = False
 # MATPLOT = True
 
 # OUTPUT_VIDEO = cv2.VideoWriter(
-#     'project.avi',
-#     cv2.VideoWriter_fourcc(*'DIVX'),
-#     15,
-#     (640, 480)
+#     'project_yolov8.avi', cv2.VideoWriter_fourcc(*'DIVX'),
+#     30,
+#     (1920, 1080)
 # )
 OUTPUT_VIDEO = None
 
@@ -76,67 +69,6 @@ def get_args_rs():
         print(f"{k} : {v}")
     print("========================================")
     return args
-
-
-def transform_3dpose(joints3d, depth_scale):
-    # # 230511
-    # matrix_z = np.array(
-    #     [[0.99950274, -0.03090854, -0.00623903],
-    #      [0.03090854,  0.92122211,  0.38780727],
-    #      [-0.00623903, -0.38780727,  0.92171937]]
-    # )
-    # joints3d += np.array([0, -1500*depth_scale, 500*depth_scale])
-    # # 230516
-    # matrix_z = np.array(
-    #     [[0.99953916, -0.02967045, -0.00641373],
-    #      [0.02967045,  0.9102765,   0.41293627],
-    #      [-0.00641373, -0.41293627, 0.91073734]]
-    # )
-    # joints3d += np.array([-700, -2200, 0])*depth_scale
-    # # 230517
-    # matrix_z = np.array(
-    #     [[0.99657794, -0.08064464, -0.0181342],
-    #      [0.08064464,  0.90048104,  0.42735271],
-    #      [-0.0181342,  -0.42735271,  0.9039031]]
-    # )
-    # joints3d += np.array([-0, -1700, 1000])*depth_scale
-    # joints3d = (matrix_z@joints3d.transpose()).transpose()
-    # joints3d[:, 0] *= -1.
-    # joints3d[:, 1] *= -0.7
-    # # 230522
-    # matrix_z = np.array(
-    #     [[0.09203368, -0.94567705, -0.31180878],
-    #      [0.94567705, -0.01504597,  0.32475919],
-    #      [-0.31180878, -0.32475919,  0.89292035]]
-    # )
-    # joints3d += np.array([-1600, -1000, 1500])*depth_scale
-    # joints3d = (matrix_z@joints3d.transpose()).transpose()
-    # joints3d[:, 0] *= -1.
-    # joints3d[:, 1] *= -1.  # to be ntu compat
-    # # 230523
-    # matrix_z = np.array(
-    #     [[0.08971949, -0.9443577,  -0.31644739],
-    #      [0.9443577,  -0.0202894,   0.32829389],
-    #      [-0.31644739, -0.32829389,  0.88999111]]
-    # )
-    # 230531
-    # matrix_z = np.array(
-    #     [[0.09067461, -0.94602187, -0.31116032],
-    #      [0.94602187, -0.01580074,  0.32371742],
-    #      [-0.31116032, -0.32371742,  0.89352464]]
-    # )
-    # 23.06.06
-    matrix_z = np.array(
-        [[0.05289203, -0.97412245, -0.21974503],
-         [0.97412245,  0.00190747,  0.22601284],
-         [-0.21974503, -0.22601284,  0.94901545]]
-    )
-    joints3d += np.array([-2150, -700, 0])*depth_scale
-    # joints3d += np.array([-1300, -800, 500])*depth_scale
-    joints3d = (matrix_z@joints3d.transpose()).transpose()
-    # joints3d[:, 0] *= -1.
-    joints3d[:, 1] *= -1.  # to be ntu compat
-    return joints3d
 
 
 class Config():
@@ -196,8 +128,8 @@ class Config():
         self.RULE_THRES_SIT = -0.05
         self.RULE_THRES_SIT_LONG = -0.09
         self.RULE_THRES_FALL = -0.16
-        self.RULE_THRES_FALL_LONG = -0.20
-        self.RULE_THRES_FALL_HEIGHT = 1.30
+        self.RULE_THRES_FALL_LONG = -0.25
+        self.RULE_THRES_FALL_HEIGHT = 1.19
 
 
 class App(AppBase):
@@ -215,8 +147,8 @@ class App(AppBase):
 
         self.valid_op_image = [0, None]
 
-        self.YOLO_SEG = YOLO("yolov8s-seg.pt")
-        self.YOLO_POS = YOLO("yolov8s-pose.pt")
+        self.YOLO_SEG = YOLO("./yolov8n-seg.pt")
+        self.YOLO_POS = YOLO("./yolov8n-pose.pt")
 
     def setup(self,
               config: Config,
@@ -238,7 +170,10 @@ class App(AppBase):
             register_tracker(self.YOLO_POS, persist=True)
 
         if self.CF.args_rs.rs_vertical:
-            rot_color_image = np.rot90(color_image, -1).copy()
+            rot_color_image = np.rot90(color_image, 1).copy()
+        else:
+            rot_color_image = color_image
+        intr_mat = self.RS_INFO['intr_mat']
 
         # To change color: ultralytics.yolo.utils.plotting.py
         results_seg = self.YOLO_SEG(
@@ -270,43 +205,77 @@ class App(AppBase):
         skel_added = False
         result_seg = results_seg[0].cpu()
         result_pos = results_pos[0].cpu()
+        keep_obj = []
         for i in range(result_pos.keypoints.data.shape[0]):
             if result_pos.boxes.data.numel() == 0:
                 continue
             if result_pos.boxes.id is None:
                 continue
             pose_result = result_pos.keypoints.data[i].numpy()
-            pose_result = np.stack([pose_result[:, 1],
-                                    CAMERA_H - pose_result[:, 0],
-                                    pose_result[:, 2]], -1)
+            pose_result = np.stack(
+                [
+                    CAMERA_W - pose_result[:, 1],
+                    # pose_result[:, 1],
+                    pose_result[:, 0],
+                    pose_result[:, 2]
+                ],
+                -1
+            )
             joints3d = PyOpenPoseNative.get_3d_skeleton(
                 skeleton=pose_result,
                 depth_img=depth_image,
-                intr_mat=self.RS_INFO['intr_mat'],
+                intr_mat=intr_mat,
                 depth_scale=self.RS_INFO['depth_scale'],
                 patch_offset=3
             )
             joints3d = transform_3dpose(joints3d,
                                         self.RS_INFO['depth_scale'])
+            if joints3d[[5, 6, 11, 12], 2].max() > 5.2:
+                continue
+            # print(joints3d[:, 2].max())
+            # print(pose_result)
             self.DS.add(
                 result_pos.boxes.id[i].item(),
                 pose_result[:, :2],
                 joints3d,
                 pose_result[:, 2]
             )
-            pose_image = result_seg.plot(img=pose_image,
-                                         boxes=True,
-                                         masks=True)
-            pose_image = result_pos.plot(img=pose_image,
-                                         boxes=True,
-                                         masks=False)
             skel_added = True
+            keep_obj.append(i)
+
+        if ((result_seg.masks is not None) and
+            (result_seg.boxes.data.numel() > 0) and
+            (result_pos.boxes.data.numel() > 0) and
+            (result_pos.keypoints is not None)):  # noqa
+            try:
+                result_pos.boxes.data = result_pos.boxes.data[keep_obj, :]
+            except:
+                None
+            try:
+                result_pos.keypoints.data = result_pos.keypoints.data[keep_obj, :]
+            except:
+                None
+            # try:
+            #     result_seg.boxes.data = result_seg.boxes.data[keep_obj, :]
+            # except:
+            #     None
+            # try:
+            #     result_seg.masks.data = result_seg.masks.data[keep_obj, :]
+            # except:
+            #     None
+
+        pose_image = result_seg.plot(img=pose_image,
+                                     boxes=False,
+                                     masks=True)
+        pose_image = result_pos.plot(img=pose_image,
+                                     boxes=True,
+                                     masks=False)
 
         # print([round(i, 2) for i in result_pos.keypoints.conf.tolist()[0]])
         self.DS.check_valid_and_delete()
 
         if self.CF.args_rs.rs_vertical:
-            pose_image = np.rot90(pose_image, 1).copy()
+            pose_image = np.rot90(pose_image, -1).copy()
 
         return True, pose_image, skel_added
 
@@ -345,6 +314,7 @@ if __name__ == "__main__":
             )
         app.CF.rs_time = t.duration
         frame = app.RS.frames[app.RS_INFO['device_sn']]
+        ori_color_image = frame['color_framedata'].copy()  # h,w,c
         color_image = frame['color_framedata']  # h,w,c
         depth_image = frame['depth_framedata']  # h,w
         if app.CF.args_rs.rs_postprocess:
@@ -353,7 +323,7 @@ if __name__ == "__main__":
         # Remove the border pixels as measurements there are not good
         color_image[:20, :, :] = 169  # right border
         color_image[-20:, :, :] = 169  # left border
-        color_image[depth_image > 2800] = 169
+        color_image[depth_image > 4000] = 169
         color_image[depth_image < 300] = 169
         # depth_colormap = rsw.frames[device_sn]['depth_color_framedata']
         # quit_key = app.visualize_rs(color_image=color_image,
@@ -383,7 +353,10 @@ if __name__ == "__main__":
             # if len(app.DS.skeletons) > 0:
             if skel_added:
                 (raw_kypts, raw_score, avg_skels,
-                    motion, prediction, distance_str) = app.infer_action(c)
+                    motion, prediction, distance_str) = app.infer_action(
+                        c,
+                        [5, 6, 11, 12]
+                )
             else:
                 printout(f'{c:04} No skeletons... ', 'i')
 
@@ -393,10 +366,10 @@ if __name__ == "__main__":
 
         # Visualize results -----------
         if not MATPLOT:
-            depth_image[depth_image > 2800] = 2800
+            depth_image[depth_image > 3500] = 3500
             depth_image[depth_image < 300] = 300
             image = app.visualize_output(
-                color_image,
+                ori_color_image,
                 depth_image,
                 op_image,
                 raw_kypts,
@@ -406,11 +379,16 @@ if __name__ == "__main__":
                 app.CF.args_rs.rs_vertical
             )
             # Face sensor
+            try:
+                raw_kypts = app.DS.get_last_skel(None)[0]
+            except ValueError:
+                raw_kypts = None
             if raw_kypts is not None:
                 pos = raw_kypts.astype(int)[:, 0, :5, :]  # [M, V, 2]
+                # pos = raw_kypts.astype(int)[:, 0, [5, 6, 11, 12], :]
                 if app.CF.args_rs.rs_vertical:
                     pos = np.flip(pos)
-                    pos[:, :, 0] = CAMERA_H - pos[:, :, 0]
+                    pos[:, :, 1] = CAMERA_W - pos[:, :, 1]
                 for pos_i in pos:
                     for pos_i_v in pos_i:
                         cv2.circle(image, pos_i_v, 20, (255, 255, 255), -1)
@@ -421,16 +399,17 @@ if __name__ == "__main__":
             blurr = cv2.GaussianBlur(image, (0, 0), 3)
             image = cv2.addWeighted(image, 1.5, blurr, -0.5, 0)
 
+            # print(image.shape)
             if OUTPUT_VIDEO is not None:
                 OUTPUT_VIDEO.write(image)
-            else:
-                cv2.imshow("Monitor", image)
-                key = cv2.waitKey(1)
-                # Press esc or 'q' to close the image window
-                if key & 0xFF == ord('q') or key == 27:
-                    cv2.destroyAllWindows()
-                    cv2.waitKey(1)
-                    break
+
+            cv2.imshow("Monitor", image)
+            key = cv2.waitKey(1)
+            # Press esc or 'q' to close the image window
+            if key & 0xFF == ord('q') or key == 27:
+                cv2.destroyAllWindows()
+                cv2.waitKey(1)
+                break
 
         if MATPLOT:
             # M, 1, V, C -> C, 1, V, M

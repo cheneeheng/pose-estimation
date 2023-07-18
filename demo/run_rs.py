@@ -16,10 +16,10 @@ if __name__ == "__main__":
     args.rs_image_height = 480
     # args.rs_color_format = rs.format.bgr8
     # args.rs_depth_format = rs.format.z16
-    args.rs_display_frame = 1
+    args.rs_display_frame = 2
     # args.rs_save_with_key = False
-    # args.rs_save_data = True
-    # args.rs_save_path = '/data/realsense_230522'
+    args.rs_save_data = True
+    args.rs_save_path = '/tmp/realsense_230626'
     # args.rs_use_one_dev_only = False
     # args.rs_dev = None
     # args.rs_ip = None
@@ -28,8 +28,8 @@ if __name__ == "__main__":
     # args.rs_depth_sensor_autoexposure_limit = 200000.0
     args.rs_enable_ir_emitter = True
     args.rs_ir_emitter_power = 300
-    # args.rs_postprocess = True  # max fps ~25 for 1280x720
-    # args.rs_vertical = True
+    args.rs_postprocess = True  # max fps ~25 for 1280x720
+    args.rs_vertical = True
 
     print("========================================")
     print(">>>>> args <<<<<")
