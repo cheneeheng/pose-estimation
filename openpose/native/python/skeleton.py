@@ -396,29 +396,29 @@ class PyOpenPoseNative(PyOpenPoseNativeBase):
 
         params["scale_number"] = 1
         params["body"] = 1
-        # params["posenet_only"] = False
-        # params["custom_net_input_layer"] = ""
-        # params["custom_net_output_layer"] = ""
+        params["posenet_only"] = False
+        params["custom_net_input_layer"] = ""
+        params["custom_net_output_layer"] = ""
         self.params = params.copy()
 
         # Get heatmap from certain layer in caffe model
         params["scale_number"] = 1
         params["body"] = 1
-        # params["posenet_only"] = True
+        params["posenet_only"] = True
         # saves heatmaps in unscaled size. Not used if posenet_only=True
         # params["upsampling_ratio"] = 1
-        # params["custom_net_input_layer"] = ""
-        # params["custom_net_output_layer"] = "pool3_stage1"
+        params["custom_net_input_layer"] = ""
+        params["custom_net_output_layer"] = "pool3_stage1"
         self.params_cout = params.copy()
 
         # Get keypoints from heatmaps
         params["scale_number"] = 1
         params["body"] = 1  # 2 to Disable OP Network
-        # params["posenet_only"] = False
+        params["posenet_only"] = False
         # saves heatmaps in unscaled size. Not used if posenet_only=True
         # params["upsampling_ratio"] = 0  # 0 rescales to input image size
-        # params["custom_net_input_layer"] = "pool3_stage1"
-        # params["custom_net_output_layer"] = ""
+        params["custom_net_input_layer"] = "pool3_stage1"
+        params["custom_net_output_layer"] = ""
         self.params_cin = params.copy()
 
         self.opWrapper = op.WrapperPython()
